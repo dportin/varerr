@@ -22,3 +22,7 @@ The presets select the `Debug` build type and enable the following options:
     varerr_INSTALL         # Generate install targets
     varerr_DEVELOPMENT     # Use strict compile options
     varerr_VENDORED_CATCH2 # Download and build Catch2
+
+## TODO
+
+- Tests for `storage_get`, `storage_activate` and `storage_emplace` primitives.

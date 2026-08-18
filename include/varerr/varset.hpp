@@ -3,10 +3,16 @@
 
 #include <cstddef>
 
-#include <memory>
-#include <utility>
+#include <algorithm>
+#include <array>
 #include <concepts>
+#include <functional>
+#include <memory>
+#include <numeric>
+#include <optional>
+#include <ranges>
 #include <type_traits>
+#include <utility>
 
 namespace varerr {
 
@@ -137,6 +143,220 @@ namespace detail {
     noexcept(std::is_nothrow_constructible_v<storage_alternative_t<N, S>, Args...>) {
         return std::construct_at(storage_emplace_impl<N>(storage), std::forward<Args>(args)...);
     }
+
+}
+
+// The carrier of the type-level algebra.
+
+template <typename... Es>
+struct Row {};
+
+// Determine whether a type is a row.
+
+template <typename T>
+inline constexpr bool is_row_v = false;
+
+template <typename... Es>
+inline constexpr bool is_row_v<Row<Es...>> = true;
+
+template <typename T>
+concept IsRow = is_row_v<T>;
+
+// Determine whether a template parameter pack is ranked.
+
+template <typename R, typename... Es>
+concept IsRanked = (requires {
+    typename std::integral_constant<std::size_t, R::template rank<Es>>;
+} && ...);
+
+template <typename R, typename E>
+requires IsRanked<R, E>
+inline constexpr std::size_t rank_v = R::template rank<E>;
+
+// Determine whether a type is a ranked row.
+
+template <typename R, typename T>
+inline constexpr bool is_ranked_row_v = false;
+
+template <typename R, typename... Es>
+inline constexpr bool is_ranked_row_v<R, Row<Es...>> = IsRanked<R, Es...>;
+
+template <typename R, typename T>
+concept IsRankedRow = IsRow<T> && is_ranked_row_v<R, T>;
+
+// Determine whether a template parameter pack is normalized.
+
+namespace detail {
+
+    template <typename R, typename... Es>
+    requires IsRanked<R, Es...>
+    [[nodiscard]] consteval bool is_normalized() noexcept {
+
+        constexpr std::size_t N = sizeof...(Es);
+        constexpr std::array<std::size_t, N> ranks { rank_v<R, Es>... };
+
+        return std::ranges::adjacent_find(ranks, std::ranges::greater_equal{}) == ranks.end();
+
+    }
+
+} // namespace detail
+
+template <typename R, typename... Es>
+concept IsNormalized = IsRanked<R, Es...> && detail::is_normalized<R, Es...>();
+
+// Determine whether a type is a normalized row.
+
+template <typename R, typename T>
+inline constexpr bool is_normalized_row_v = false;
+
+template <typename R, typename... Es>
+inline constexpr bool is_normalized_row_v<R, Row<Es...>> = IsNormalized<R, Es...>;
+
+template <typename R, typename T>
+concept IsNormalizedRow = IsRankedRow<R, T> && is_normalized_row_v<R, T>;
+
+// Determine the position of an alternative in a ranked or normalized row.
+
+namespace detail {
+
+    template <typename R, typename E, typename... Es>
+    requires IsRanked<R, E> && IsRanked<R, Es...>
+    [[nodiscard]] consteval std::optional<std::size_t> row_lookup_ranked_impl() noexcept {
+
+        constexpr std::size_t N = sizeof...(Es);
+        constexpr std::array<std::size_t, N> ranks { rank_v<R, Es>... };
+        const auto it = std::ranges::find(ranks, rank_v<R, E>);
+
+        if (it != ranks.end()) {
+            return static_cast<std::size_t>(it - ranks.begin()); // todo - distance
+        }
+
+        return std::nullopt;
+
+    }
+
+    template <typename R, typename E, typename... Es>
+    requires IsRanked<R, E> && IsNormalized<R, Es...>
+    [[nodiscard]] consteval std::optional<std::size_t> row_lookup_normal_impl() noexcept {
+
+        constexpr std::size_t N = sizeof...(Es);
+        constexpr std::array<std::size_t, N> ranks { rank_v<R, Es>... };
+        const auto it = std::ranges::lower_bound(ranks, rank_v<R, E>);
+
+        if (it != ranks.end() && *it == rank_v<R, E>) {
+            return static_cast<std::size_t>(std::distance(ranks.begin(), it));
+        }
+
+        return std::nullopt;
+
+    }
+
+    template <typename R, typename E, typename... Es>
+    requires IsRanked<R, E> && IsNormalized<R, Es...>
+    inline constexpr std::optional<std::size_t> row_lookup_normal_v = row_lookup_normal_impl<R, E, Es...>();
+
+    template <typename R, typename E, typename... Es>
+    requires IsRanked<R, E> && IsNormalized<R, Es...>
+    inline constexpr bool row_elem_normal_v = row_lookup_normal_v<R, E, Es...>.has_value();
+
+    template <typename R, typename E, typename... Es>
+    requires IsRanked<R, E> && IsNormalized<R, Es...> && row_elem_normal_v<R, E, Es...>
+    inline constexpr std::size_t row_index_normal_v = row_lookup_normal_v<R, E, Es...>.value();
+
+    // Adapt row_lookup_normal_impl<R, E, Es...>() to Row<Es...>.
+
+    template <typename R, typename E, typename T>
+    struct row_lookup_normal_impl_adapter;
+
+    template <typename R, typename E, typename... Es>
+    requires IsRanked<R, E> && IsNormalized<R, Es...>
+    struct row_lookup_normal_impl_adapter<R, E, Row<Es...>> {
+        static constexpr std::optional<std::size_t> value = row_lookup_normal_impl<R, E, Es...>();
+    };
+
+} // namespace detail
+
+template <typename R, typename E, typename T>
+requires IsRanked<R, E> && IsNormalizedRow<R, T>
+inline constexpr std::optional<std::size_t> row_lookup_v = detail::row_lookup_normal_impl_adapter<R, E, T>::value;
+
+template <typename R, typename E, typename T>
+requires IsRanked<R, E> && IsNormalizedRow<R, T>
+inline constexpr bool row_elem_v = row_lookup_v<R, E, T>.has_value();
+
+template <typename R, typename E, typename T>
+requires IsRanked<R, E> && IsNormalizedRow<R, T> && row_elem_v<R, E, T>
+inline constexpr std::size_t row_index_v = row_lookup_v<R, E, T>.value();
+
+// Determine whether two normalized rows are equivalent.
+
+namespace detail {
+
+    template <typename R, typename... Es, typename... Fs>
+    requires IsNormalized<R, Es...> && IsNormalized<R, Fs...>
+    [[nodiscard]] consteval bool row_subset_normal_impl(Row<Es...>, Row<Fs...>) noexcept {
+
+        constexpr std::size_t sizeE = sizeof...(Es);
+        constexpr std::array<std::size_t, sizeE> arrayE { rank_v<R, Es>... };
+
+        constexpr std::size_t sizeF = sizeof...(Fs);
+        constexpr std::array<std::size_t, sizeF> arrayF { rank_v<R, Fs>... };
+
+        // std::ranges::includes uses std::ranges::less with the std::identity
+        // projection.
+
+        return std::ranges::includes(arrayF, arrayE);
+
+    }
+
+    template <typename R, typename... Es, typename... Fs>
+    requires IsNormalized<R, Es...> && IsNormalized<R, Fs...>
+    [[nodiscard]] consteval bool row_equiv_normal_impl(Row<Es...>, Row<Fs...>) noexcept {
+
+        constexpr std::size_t sizeE = sizeof...(Es);
+        constexpr std::array<std::size_t, sizeE> arrayE { rank_v<R, Es>... };
+
+        constexpr std::size_t sizeF = sizeof...(Fs);
+        constexpr std::array<std::size_t, sizeF> arrayF { rank_v<R, Fs>... };
+
+        // std::ranges::equal uses std::ranges::equal_to with the std::identity
+        // projection.
+
+        return std::ranges::equal(arrayE, arrayF);
+
+    }
+
+} // namespace detail
+
+template <typename R, typename U, typename V>
+requires IsNormalizedRow<R, U> && IsNormalizedRow<R, V>
+inline constexpr bool row_subset_v = detail::row_subset_normal_impl<R>(U {}, V {});
+
+template <typename R, typename U, typename V>
+requires IsNormalizedRow<R, U> && IsNormalizedRow<R, V>
+inline constexpr bool row_equiv_v = detail::row_equiv_normal_impl<R>(U {}, V {});
+
+// The main status type is parameterized by a row while its implementation is
+// parameterized by a pack (for convenience, since lifting packs to rows is ea-
+// sier than unpacking rows).
+
+namespace detail {
+
+    template <typename R, IsTriviallyStorable... Es>
+    requires IsNormalized<R, Es...>
+    struct StatusImpl final {
+
+        using TagType = std::size_t;
+        using StorageType = Storage<Es...>;
+
+        /* TODO */
+
+        private:
+
+        TagType active_;
+        StorageType alternatives_;
+
+    };
 
 } // namespace detail
 

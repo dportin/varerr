@@ -188,3 +188,64 @@ TEST_CASE("varset_storage_functional", "[varset][storage][functional]") {
     }
 
 }
+
+template <std::size_t N>
+struct E {};
+
+struct Universe {
+
+    template <typename T>
+    struct rank_trait;
+
+    template <std::size_t N>
+    struct rank_trait<E<N>> {
+        static constexpr std::size_t value = N;
+    };
+
+    // Constrain [rank] for use with STATIC_<MODE>_FALSE
+
+    template <typename T>
+    requires requires { rank_trait<T>::value; }
+    static constexpr std::size_t rank = rank_trait<T>::value;
+
+};
+
+TEST_CASE("varset_ranked", "[varset][row][ranked]") {
+
+    STATIC_REQUIRE(varerr::IsRanked<Universe>);
+    STATIC_REQUIRE(varerr::IsRanked<Universe, E<0>>);
+    STATIC_REQUIRE(varerr::IsRanked<Universe, E<1>, E<0>>);
+
+    STATIC_REQUIRE_FALSE(varerr::IsRanked<Universe, int>);
+    STATIC_REQUIRE_FALSE(varerr::IsRanked<Universe, E<1>, int>);
+
+    STATIC_REQUIRE(varerr::IsRankedRow<Universe, varerr::Row<>>);
+    STATIC_REQUIRE(varerr::IsRankedRow<Universe, varerr::Row<E<0>>>);
+    STATIC_REQUIRE(varerr::IsRankedRow<Universe, varerr::Row<E<1>, E<0>>>);
+
+    STATIC_REQUIRE_FALSE(varerr::IsRanked<Universe, varerr::Row<int>>);
+    STATIC_REQUIRE_FALSE(varerr::IsRanked<Universe, varerr::Row<E<1>, int>>);
+
+}
+
+TEST_CASE("varset_normalized", "[varset][row][normalized]") {
+
+    STATIC_REQUIRE(varerr::IsNormalized<Universe>);
+    STATIC_REQUIRE(varerr::IsNormalized<Universe, E<0>>);
+    STATIC_REQUIRE(varerr::IsNormalized<Universe, E<0>, E<1>>);
+    STATIC_REQUIRE(varerr::IsNormalized<Universe, E<0>, E<1>, E<2>>);
+
+    STATIC_REQUIRE_FALSE(varerr::IsNormalized<Universe, E<1>, E<0>>);
+    STATIC_REQUIRE_FALSE(varerr::IsNormalized<Universe, E<0>, E<2>, E<1>>);
+    STATIC_REQUIRE_FALSE(varerr::IsNormalized<Universe, E<0>, E<1>, int, E<2>>);
+
+    STATIC_REQUIRE(varerr::IsNormalizedRow<Universe, varerr::Row<>>);
+    STATIC_REQUIRE(varerr::IsNormalizedRow<Universe, varerr::Row<E<0>>>);
+    STATIC_REQUIRE(varerr::IsNormalizedRow<Universe, varerr::Row<E<0>, E<1>>>);
+    STATIC_REQUIRE(varerr::IsNormalizedRow<Universe, varerr::Row<E<0>, E<1>, E<2>>>);
+
+    STATIC_REQUIRE_FALSE(varerr::IsNormalizedRow<Universe, varerr::Row<E<1>, E<0>>>);
+    STATIC_REQUIRE_FALSE(varerr::IsNormalizedRow<Universe, varerr::Row<E<0>, E<2>, E<1>>>);
+    STATIC_REQUIRE_FALSE(varerr::IsNormalizedRow<Universe, varerr::Row<E<0>, E<1>, int, E<2>>>);
+
+}

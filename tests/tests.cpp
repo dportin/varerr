@@ -249,3 +249,46 @@ TEST_CASE("varset_normalized", "[varset][row][normalized]") {
     STATIC_REQUIRE_FALSE(varerr::IsNormalizedRow<Universe, varerr::Row<E<0>, E<1>, int, E<2>>>);
 
 }
+
+TEST_CASE("status_impl_static", "[status][impl][static]") {
+
+    STATIC_REQUIRE_FALSE(std::is_constructible_v<varerr::detail::StatusImpl<Universe>>);
+    STATIC_REQUIRE_FALSE(std::is_default_constructible_v<varerr::detail::StatusImpl<Universe>>);
+    STATIC_REQUIRE_FALSE(std::is_default_constructible_v<varerr::detail::StatusImpl<Universe, E<1>>>);
+
+    STATIC_REQUIRE(std::is_trivially_destructible_v<varerr::detail::StatusImpl<Universe>>);
+    STATIC_REQUIRE(std::is_trivially_destructible_v<varerr::detail::StatusImpl<Universe, E<1>>>);
+
+    STATIC_REQUIRE(std::is_trivially_copyable_v<varerr::detail::StatusImpl<Universe>>);
+    STATIC_REQUIRE(std::is_trivially_copy_assignable_v<varerr::detail::StatusImpl<Universe>>);
+    STATIC_REQUIRE(std::is_trivially_copy_constructible_v<varerr::detail::StatusImpl<Universe>>);
+    STATIC_REQUIRE(std::is_trivially_move_assignable_v<varerr::detail::StatusImpl<Universe>>);
+    STATIC_REQUIRE(std::is_trivially_move_constructible_v<varerr::detail::StatusImpl<Universe>>);
+
+    STATIC_REQUIRE(std::is_trivially_copyable_v<varerr::detail::StatusImpl<Universe, E<0>>>);
+    STATIC_REQUIRE(std::is_trivially_copy_assignable_v<varerr::detail::StatusImpl<Universe, E<0>>>);
+    STATIC_REQUIRE(std::is_trivially_copy_constructible_v<varerr::detail::StatusImpl<Universe, E<0>>>);
+    STATIC_REQUIRE(std::is_trivially_move_assignable_v<varerr::detail::StatusImpl<Universe, E<0>>>);
+    STATIC_REQUIRE(std::is_trivially_move_constructible_v<varerr::detail::StatusImpl<Universe, E<0>>>);
+
+}
+
+template <typename... Ts>
+struct ExpectedLayout final {
+    std::size_t active;
+    varerr::detail::Storage<Ts...> alternatives;
+};
+
+TEST_CASE("status_impl_memory", "[status][impl][memory]") {
+
+    using St = varerr::detail::Storage<E<0>, E<1>, E<2>>;
+    using Si = varerr::detail::StatusImpl<Universe, E<0>, E<1>, E<2>>;
+
+    STATIC_REQUIRE(sizeof(Si) >= sizeof(St));
+    STATIC_REQUIRE(alignof(Si) == std::max(alignof(std::size_t), alignof(St)));
+    STATIC_REQUIRE(sizeof(Si) % alignof(Si) == 0);
+
+    STATIC_REQUIRE(sizeof(Si) == sizeof(ExpectedLayout<E<0>, E<1>, E<2>>));
+    STATIC_REQUIRE(alignof(Si) == alignof(ExpectedLayout<E<0>, E<1>, E<2>>));
+
+}

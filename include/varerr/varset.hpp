@@ -18,18 +18,24 @@ namespace varerr {
 
 namespace detail {
 
-    // The alternatives must be trivially copyable. Note that trivial copyabil-
-    // ity implies trivial destructibility since all trivially copyable types
-    // must have a non-deleted trivial destructor. The requirement is however
-    // repeated here for clarity.
-
     template <typename E>
     concept IsStorable =
-        std::is_object_v<E> && std::same_as<E, std::remove_cv_t<E>>;
+        std::is_object_v<E> &&
+        std::same_as<E, std::remove_cv_t<E>>;
 
-    template <typename E>
-    concept IsTriviallyStorable =
-        IsStorable<E> && std::is_trivially_copyable_v<E> && std::is_trivially_destructible_v<E>;
+} // namespace detail
+
+// The alternatives must be trivially copyable. Note that trivial copyability
+// implies trivial destructibility since all trivially copyable types have a
+// non-deleted trivial destructor. The requirement is repeated for clarity.
+
+template <typename E>
+concept IsTriviallyStorable =
+    detail::IsStorable<E> &&
+    std::is_trivially_copyable_v<E> &&
+    std::is_trivially_destructible_v<E>;
+
+namespace detail {
 
     template <IsTriviallyStorable... Es>
     union Storage {
@@ -415,7 +421,7 @@ namespace detail {
                 });
             }
 
-        // Visit the active member using the index of the active member.
+        // Dispatch visitor to active member by index.
 
         template <typename F>
         constexpr decltype(auto) visit(F&& f) const
@@ -467,7 +473,90 @@ namespace detail {
 
     };
 
+    // Normalize types by rank.
+
+    template <typename R, typename... Es>
+    requires IsRanked<R, Es...>
+    consteval auto row_normalize_indices() noexcept {
+
+        constexpr std::size_t N = sizeof...(Es);
+        constexpr std::array<std::size_t, N> ranks { rank_v<R, Es>... };
+
+        std::array<std::size_t, N> indices {};
+        std::ranges::iota(indices, static_cast<std::size_t>(0));
+        std::ranges::sort(indices, {}, [&](std::size_t i) { return ranks[i]; });
+
+        // If !std::same_as<E, F> but rank_v<R, E> == rank_v<R, F> the user has
+        // likely made an error defining their rank function, which is required
+        // to be injective over their universe of error types. It might be use-
+        // ful to check whether ranks preserve structural equality here: since
+        // this is a consteval function throwing would not contaminate any run-
+        // time code and would catch the most likely source of errors.
+
+        std::size_t count = 0;
+        for (std::size_t i = 0; i < N; ++i) {
+            if (i == 0 || ranks[indices[i]] != ranks[indices[count - 1]]) {
+                indices[count++] = indices[i];
+            }
+        }
+
+        return std::pair { count, indices };
+
+    }
+
+    // Index into a template parameter pack. Falls back to std::tuple_element_t
+    // if the compiler does not have a pack indexing builtin (MSVC, AppleClang).
+
+    #if defined(__has_builtin) && __has_builtin(__type_pack_element)
+    template <std::size_t I, typename... Ts>
+    using pack_subscript_t = __type_pack_element<I, Ts...>;
+    #else
+    template <std::size_t I, typename... Ts>
+    using pack_subscript_t = std::tuple_element_t<I, std::tuple<Ts...>>;
+    #endif
+
+    template <typename R, typename... Es>
+    requires IsRanked<R, Es...>
+    inline constexpr auto row_normalize_indices_v = row_normalize_indices<R, Es...>();
+
+    template <typename R, typename... Es>
+    requires IsRanked<R, Es...>
+    struct row_normalize_impl {
+
+        static constexpr auto result = row_normalize_indices_v<R, Es...>;
+        static constexpr auto count = result.first;
+        static constexpr auto indices = result.second;
+
+        using type = decltype(
+            []<std::size_t... Is>(std::index_sequence<Is...>) {
+                return []<std::size_t... Js>() -> Row<pack_subscript_t<Js, Es...>...> {
+                    return {};
+                }.template operator()<indices[Is]...>();
+            }(std::make_index_sequence<count> {})
+        );
+
+    };
+
+    template <typename R, typename... Es>
+    requires IsRanked<R, Es...>
+    using row_normalize_t = row_normalize_impl<R, Es...>::type;
+
+    // Unpack a Row into a StatusImpl.
+
+    template <typename R, typename Row>
+    struct row_status_adapter;
+
+    template <typename R, typename... Es>
+    struct row_status_adapter<R, Row<Es...>> : std::type_identity<StatusImpl<R, Es...>> {};
+
+    template <typename R, typename Row>
+    using row_status_adapter_t = typename row_status_adapter<R, Row>::type;
+
 } // namespace detail
+
+template <typename R, IsTriviallyStorable... Es>
+requires IsRanked<R, Es...>
+using Status = typename detail::row_status_adapter<R, detail::row_normalize_t<R, Es...>>::type;
 
 } // namespace varerr
 

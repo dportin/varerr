@@ -136,21 +136,21 @@ namespace {
 
 TEST_CASE("varset_storage_trivial_store", "[varset][storage][trivial]") {
 
-    STATIC_REQUIRE(varerr::detail::IsTriviallyStorable<int>);
-    STATIC_REQUIRE(varerr::detail::IsTriviallyStorable<TrivialStoreType>);
-    STATIC_REQUIRE(varerr::detail::IsTriviallyStorable<S2>);
-    STATIC_REQUIRE(varerr::detail::IsTriviallyStorable<NonTrivialConstructType>);
-    STATIC_REQUIRE(varerr::detail::IsTriviallyStorable<Storage<TrivialStoreType>>);
-    STATIC_REQUIRE(varerr::detail::IsTriviallyStorable<Storage<NonTrivialConstructType>>);
+    STATIC_REQUIRE(varerr::IsTriviallyStorable<int>);
+    STATIC_REQUIRE(varerr::IsTriviallyStorable<TrivialStoreType>);
+    STATIC_REQUIRE(varerr::IsTriviallyStorable<S2>);
+    STATIC_REQUIRE(varerr::IsTriviallyStorable<NonTrivialConstructType>);
+    STATIC_REQUIRE(varerr::IsTriviallyStorable<Storage<TrivialStoreType>>);
+    STATIC_REQUIRE(varerr::IsTriviallyStorable<Storage<NonTrivialConstructType>>);
 
-    STATIC_REQUIRE_FALSE(varerr::detail::IsTriviallyStorable<const int>);
-    STATIC_REQUIRE_FALSE(varerr::detail::IsTriviallyStorable<int&>);
-    STATIC_REQUIRE_FALSE(varerr::detail::IsTriviallyStorable<void>);
-    STATIC_REQUIRE_FALSE(varerr::detail::IsTriviallyStorable<bool(int)>);
+    STATIC_REQUIRE_FALSE(varerr::IsTriviallyStorable<const int>);
+    STATIC_REQUIRE_FALSE(varerr::IsTriviallyStorable<int&>);
+    STATIC_REQUIRE_FALSE(varerr::IsTriviallyStorable<void>);
+    STATIC_REQUIRE_FALSE(varerr::IsTriviallyStorable<bool(int)>);
 
-    STATIC_REQUIRE_FALSE(varerr::detail::IsTriviallyStorable<NonTrivialDestructType>);
-    STATIC_REQUIRE_FALSE(varerr::detail::IsTriviallyStorable<NonTrivialCopyType>);
-    STATIC_REQUIRE_FALSE(varerr::detail::IsTriviallyStorable<NonTrivialMoveType>);
+    STATIC_REQUIRE_FALSE(varerr::IsTriviallyStorable<NonTrivialDestructType>);
+    STATIC_REQUIRE_FALSE(varerr::IsTriviallyStorable<NonTrivialCopyType>);
+    STATIC_REQUIRE_FALSE(varerr::IsTriviallyStorable<NonTrivialMoveType>);
 
 }
 
@@ -290,5 +290,34 @@ TEST_CASE("status_impl_memory", "[status][impl][memory]") {
 
     STATIC_REQUIRE(sizeof(Si) == sizeof(ExpectedLayout<E<0>, E<1>, E<2>>));
     STATIC_REQUIRE(alignof(Si) == alignof(ExpectedLayout<E<0>, E<1>, E<2>>));
+
+}
+
+TEST_CASE("status_impl_normalize", "[status][impl][functional]") {
+
+    STATIC_REQUIRE(std::same_as<
+        varerr::Status<Universe, E<0>, E<1>>,
+        varerr::detail::StatusImpl<Universe, E<0>, E<1>>
+    >);
+
+    STATIC_REQUIRE(std::same_as<
+        varerr::Status<Universe, E<1>, E<0>>,
+        varerr::detail::StatusImpl<Universe, E<0>, E<1>>
+    >);
+
+    STATIC_REQUIRE(std::same_as<
+        varerr::Status<Universe, E<0>, E<0>>,
+        varerr::detail::StatusImpl<Universe, E<0>>
+    >);
+
+    STATIC_REQUIRE(std::same_as<
+        varerr::Status<Universe>,
+        varerr::detail::StatusImpl<Universe>
+    >);
+
+    STATIC_REQUIRE(std::same_as<
+        varerr::Status<Universe, E<5>, E<2>, E<2>, E<8>, E<1>, E<2>, E<4>, E<2>>,
+        varerr::detail::StatusImpl<Universe, E<1>, E<2>, E<4>, E<5>, E<8>>
+    >);
 
 }

@@ -146,7 +146,6 @@ target_sources(${PROJECT_NAME}_header_only
         BASE_DIRS
             "${CMAKE_CURRENT_SOURCE_DIR}/include"
         FILES
-            "${CMAKE_CURRENT_SOURCE_DIR}/include/${PROJECT_NAME}/varset.hpp"
             "${CMAKE_CURRENT_SOURCE_DIR}/include/${PROJECT_NAME}/status.hpp"
             "${CMAKE_CURRENT_SOURCE_DIR}/include/${PROJECT_NAME}/result.hpp"
 )

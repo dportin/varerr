@@ -27,3 +27,4 @@ The presets select the `Debug` build type and enable the following options:
 
 - Tests for `storage_get`, `storage_activate` and `storage_emplace` primitives.
 - Consider throwing when `rank_v<R, E> == rank_v<R, F>` but `!std::same_as<E, F>` when normalizing rows.
+- Hide everything in `status.hpp` except `IsRankedPack` (`IsErrorRow`) and `IsTriviallyStorable`.

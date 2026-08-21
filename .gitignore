@@ -70,3 +70,6 @@ Testing/
 # Editors
 .vscode/
 .vs/
+
+!.vscode/
+!.vscode/settings.json

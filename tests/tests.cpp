@@ -1,15 +1,14 @@
 #include <catch2/catch_test_macros.hpp>
 
-#include <varerr/varset.hpp>
 #include <varerr/status.hpp>
 #include <varerr/result.hpp>
 
 #include <cstddef>
 
-#include <utility>
-#include <concepts>
 #include <algorithm>
+#include <concepts>
 #include <type_traits>
+#include <utility>
 
 // Triviality
 
@@ -80,8 +79,8 @@ TEST_CASE("varset_storage_memory", "[varset][storage][memory]") {
 
     // The standard does not especify an exact value for the empty case.
 
-    STATIC_REQUIRE(sizeof(Storage<>) > 0);
-    STATIC_REQUIRE(sizeof(Storage<>) > 0);
+    STATIC_REQUIRE(sizeof(Storage<>) > 0); // NOLINT
+    STATIC_REQUIRE(sizeof(Storage<>) > 0); // NOLINT
 
 }
 
@@ -108,29 +107,33 @@ TEST_CASE("varset_storage_memory_layout", "[varset][storage][memory]") {
 
 namespace {
 
+    // NOLINTBEGIN
+
     struct TrivialStoreType {
-        int x;
+        int store_;
     };
 
     struct NonTrivialConstructType {
-        int x;
+        int store_;
         NonTrivialConstructType(int) {}
     };
 
     struct NonTrivialDestructType {
-        int x;
+        int store_;
         ~NonTrivialDestructType() {}
     };
 
     struct NonTrivialCopyType {
-        int x;
+        int store_;
         NonTrivialCopyType(const NonTrivialCopyType&) {}
     };
 
     struct NonTrivialMoveType {
-        int x;
+        int store_;
         NonTrivialMoveType(NonTrivialMoveType&&) {}
     };
+
+    // NOLINTEND
 
 }
 
@@ -175,49 +178,66 @@ TEST_CASE("varset_storage_functional", "[varset][storage][functional]") {
 
         STATIC_REQUIRE([]{
             S2 storage(std::in_place_index<1>, 100);
-            return storage.tail_.head_;
+            return storage.tail_.head_; // NOLINT
         }() == 100);
 
         STATIC_REQUIRE([]{
             S2 storage(std::in_place_index<0>, static_cast<short>(100));
             std::construct_at(std::addressof(storage.tail_));
-            std::construct_at(std::addressof(storage.tail_.head_), 101);
-            return storage.tail_.head_;
+            std::construct_at(std::addressof(storage.tail_.head_), 101); // NOLINT
+            return storage.tail_.head_; // NOLINT
         }() == 101);
 
     }
 
 }
 
-template <std::size_t N>
-struct E {};
-
-struct Universe {
-
-    template <typename T>
-    struct rank_trait;
+namespace {
 
     template <std::size_t N>
-    struct rank_trait<E<N>> {
-        static constexpr std::size_t value = N;
+    struct E {
+        
+        std::size_t value_;
+
+        constexpr E(std::size_t n) noexcept :
+            value_(n) {}
+
+        template <std::size_t>
+        friend struct E;
+    
     };
 
-    // Constrain [rank] for use with STATIC_<MODE>_FALSE
+    template <std::size_t N, std::size_t M>
+    constexpr bool operator==(const E<N>& lhs, const E<M>& rhs) noexcept {
+        return lhs.value_ == rhs.value_;
+    }
 
-    template <typename T>
-    requires requires { rank_trait<T>::value; }
-    static constexpr std::size_t rank = rank_trait<T>::value;
+    struct Universe {
 
-};
+        template <typename T>
+        struct rank_trait;
+
+        template <std::size_t N>
+        struct rank_trait<E<N>> {
+            static constexpr std::size_t rank_ = N;
+        };
+
+        template <typename T>
+        requires requires { rank_trait<T>::rank_; }
+        static constexpr std::size_t rank = rank_trait<T>::rank_;
+
+    };
+
+}
 
 TEST_CASE("varset_ranked", "[varset][row][ranked]") {
 
-    STATIC_REQUIRE(varerr::IsRanked<Universe>);
-    STATIC_REQUIRE(varerr::IsRanked<Universe, E<0>>);
-    STATIC_REQUIRE(varerr::IsRanked<Universe, E<1>, E<0>>);
+    STATIC_REQUIRE(varerr::detail::IsRankedPack<Universe>);
+    STATIC_REQUIRE(varerr::detail::IsRankedPack<Universe, E<0>>);
+    STATIC_REQUIRE(varerr::detail::IsRankedPack<Universe, E<1>, E<0>>);
 
-    STATIC_REQUIRE_FALSE(varerr::IsRanked<Universe, int>);
-    STATIC_REQUIRE_FALSE(varerr::IsRanked<Universe, E<1>, int>);
+    STATIC_REQUIRE_FALSE(varerr::detail::IsRankedPack<Universe, int>);
+    STATIC_REQUIRE_FALSE(varerr::detail::IsRankedPack<Universe, E<1>, int>);
 
     STATIC_REQUIRE(varerr::IsRankedRow<Universe, varerr::Row<>>);
     STATIC_REQUIRE(varerr::IsRankedRow<Universe, varerr::Row<E<0>>>);
@@ -230,14 +250,14 @@ TEST_CASE("varset_ranked", "[varset][row][ranked]") {
 
 TEST_CASE("varset_normalized", "[varset][row][normalized]") {
 
-    STATIC_REQUIRE(varerr::IsNormalized<Universe>);
-    STATIC_REQUIRE(varerr::IsNormalized<Universe, E<0>>);
-    STATIC_REQUIRE(varerr::IsNormalized<Universe, E<0>, E<1>>);
-    STATIC_REQUIRE(varerr::IsNormalized<Universe, E<0>, E<1>, E<2>>);
+    STATIC_REQUIRE(varerr::detail::IsNormalizedPack<Universe>);
+    STATIC_REQUIRE(varerr::detail::IsNormalizedPack<Universe, E<0>>);
+    STATIC_REQUIRE(varerr::detail::IsNormalizedPack<Universe, E<0>, E<1>>);
+    STATIC_REQUIRE(varerr::detail::IsNormalizedPack<Universe, E<0>, E<1>, E<2>>);
 
-    STATIC_REQUIRE_FALSE(varerr::IsNormalized<Universe, E<1>, E<0>>);
-    STATIC_REQUIRE_FALSE(varerr::IsNormalized<Universe, E<0>, E<2>, E<1>>);
-    STATIC_REQUIRE_FALSE(varerr::IsNormalized<Universe, E<0>, E<1>, int, E<2>>);
+    STATIC_REQUIRE_FALSE(varerr::detail::IsNormalizedPack<Universe, E<1>, E<0>>);
+    STATIC_REQUIRE_FALSE(varerr::detail::IsNormalizedPack<Universe, E<0>, E<2>, E<1>>);
+    STATIC_REQUIRE_FALSE(varerr::detail::IsNormalizedPack<Universe, E<0>, E<1>, int, E<2>>);
 
     STATIC_REQUIRE(varerr::IsNormalizedRow<Universe, varerr::Row<>>);
     STATIC_REQUIRE(varerr::IsNormalizedRow<Universe, varerr::Row<E<0>>>);
@@ -273,11 +293,15 @@ TEST_CASE("status_impl_static", "[status][impl][static]") {
 
 }
 
+namespace {
+
 template <typename... Ts>
 struct ExpectedLayout final {
     std::size_t active;
     varerr::detail::Storage<Ts...> alternatives;
 };
+
+} // namespace
 
 TEST_CASE("status_impl_memory", "[status][impl][memory]") {
 
@@ -296,28 +320,42 @@ TEST_CASE("status_impl_memory", "[status][impl][memory]") {
 TEST_CASE("status_impl_normalize", "[status][impl][functional]") {
 
     STATIC_REQUIRE(std::same_as<
-        varerr::Status<Universe, E<0>, E<1>>,
+        varerr::detail::Status<Universe, E<0>, E<1>>,
         varerr::detail::StatusImpl<Universe, E<0>, E<1>>
     >);
 
     STATIC_REQUIRE(std::same_as<
-        varerr::Status<Universe, E<1>, E<0>>,
+        varerr::detail::Status<Universe, E<1>, E<0>>,
         varerr::detail::StatusImpl<Universe, E<0>, E<1>>
     >);
 
     STATIC_REQUIRE(std::same_as<
-        varerr::Status<Universe, E<0>, E<0>>,
+        varerr::detail::Status<Universe, E<0>, E<0>>,
         varerr::detail::StatusImpl<Universe, E<0>>
     >);
 
     STATIC_REQUIRE(std::same_as<
-        varerr::Status<Universe>,
+        varerr::detail::Status<Universe>,
         varerr::detail::StatusImpl<Universe>
     >);
 
     STATIC_REQUIRE(std::same_as<
-        varerr::Status<Universe, E<5>, E<2>, E<2>, E<8>, E<1>, E<2>, E<4>, E<2>>,
+        varerr::detail::Status<Universe, E<5>, E<2>, E<2>, E<8>, E<1>, E<2>, E<4>, E<2>>,
         varerr::detail::StatusImpl<Universe, E<1>, E<2>, E<4>, E<5>, E<8>>
     >);
+
+}
+
+TEST_CASE("result_error_functional_deduction", "[result][error][functional]") {
+    
+    auto infer0 = varerr::Error(static_cast<short>(4));
+    STATIC_REQUIRE(std::same_as<varerr::Error<short>, decltype(infer0)>);
+
+    auto infer1 = varerr::Error(E<0> { 1 });
+    STATIC_REQUIRE(std::same_as<varerr::Error<E<0>>, decltype(infer1)>);
+
+    auto emplace0 = varerr::Error<E<0>> { std::size_t { 42 } }; // NOLINT
+    STATIC_REQUIRE(std::same_as<varerr::Error<E<0>>, decltype(emplace0)>);
+    REQUIRE(emplace0.unwrap().value_ == 42);
 
 }

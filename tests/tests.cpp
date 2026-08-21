@@ -9,6 +9,7 @@
 #include <concepts>
 #include <type_traits>
 #include <utility>
+#include <functional>
 
 // Triviality
 
@@ -405,4 +406,51 @@ TEST_CASE("result_functional_access", "[result][functional]") {
     REQUIRE(err0.error_if<E<0>>() == nullptr);
     REQUIRE(err0.error_if<E<1>>()->value_ == 42);
 
+}
+
+TEST_CASE("result_functional_transform", "[result][functional]") {
+
+    const auto increment = std::bind_back(std::plus<> {}, 1);
+
+    // transform
+    R3<int> res0 = R3<int>(42); // NOLINT
+    R3<int> res1 = res0.transform(increment);
+    REQUIRE(res1.value() == 43);
+
+    // chaining
+    R3<int> res2 = res0.transform(increment).transform(increment);
+    REQUIRE(res2.value() == 44);
+
+    // conversion
+    R3<long> res3 = res0.transform([](int n) -> long { return n + 1; });
+    REQUIRE(res3.value() == 43);
+
+    // conversion chaining
+    R3<short> res4 = R3<short>(42); // NOLINT
+    R3<long> res5 = res4.transform([](short n) -> int { return n + 1; })
+                        .transform([](int n) -> long { return n + 1; });
+    REQUIRE(res5.value() == 44);
+
+    // transform dispatches to correct constructor when value in error row
+    R3<unsigned int> res6 = R3<unsigned int>(42); // NOLINT
+    R3<E<0>> res7 = res6.transform([](unsigned int n) -> E<0> { return n; });
+    REQUIRE(res7.has_value());
+    REQUIRE(!res7.has_error());
+    REQUIRE(res7.value().value_ == 42);
+
+    // result holds an error
+    R3<unsigned int> err0 = R3<unsigned int>(varerr::Error<E<1>>(42)); // NOLINT
+    R3<unsigned int> err1 = err0.transform([](unsigned int n) -> unsigned int { return n + 1; });
+    REQUIRE(err1.has_error());
+    REQUIRE(!err1.has_value());
+    REQUIRE(err1.holds_error<E<1>>());
+    REQUIRE(err1.error<E<1>>().value_ == 42);
+
+    // conversion when result holds an error
+    R3<E<1>> err2 = err0.transform([](unsigned int n) -> E<1> { return n; });
+    REQUIRE(err2.has_error());
+    REQUIRE(!err2.has_value());
+    REQUIRE(err2.holds_error<E<1>>());
+    REQUIRE(err2.error<E<1>>().value_ == 42);
+    
 }

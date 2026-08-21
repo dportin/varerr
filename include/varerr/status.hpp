@@ -411,6 +411,9 @@ namespace detail {
     inline constexpr bool is_nothrow_visitable_v =
         (std::is_nothrow_invocable_v<F, const Es&> && ...);
 
+    template <typename Self, typename T>
+    using const_preserving_pointer_t = std::conditional_t<std::is_const_v<std::remove_reference_t<Self>>, const T*, T*>;
+
     template <typename R, IsTriviallyStorable... Es>
     requires IsNormalizedPack<R, Es...>
     struct StatusImpl final {
@@ -449,6 +452,21 @@ namespace detail {
                     storage_emplace<I>(this->alternatives_, e);
                 });
             }
+
+        // Return pointer to underlying storage by type.
+
+        template <typename E, typename Self>
+        constexpr auto get_if(this Self& self) noexcept -> const_preserving_pointer_t<Self, E> {
+            if constexpr (row_elem_normalized_v<R, E, Row<Es...>>) {
+                if (self.template holds<E>()) {
+                    return std::addressof(storage_get<row_index_normalized_v<R, E, Row<Es...>>>(self.alternatives_));
+                } else {
+                    return nullptr;
+                }
+            } else {
+                return nullptr;
+            }
+        }
 
         // Dispatch visitor to active member by index.
 

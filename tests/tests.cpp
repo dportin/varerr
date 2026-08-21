@@ -359,3 +359,50 @@ TEST_CASE("result_error_functional_deduction", "[result][error][functional]") {
     REQUIRE(emplace0.unwrap().value_ == 42);
 
 }
+
+namespace {
+
+template <typename T>
+using R0 = varerr::Result<Universe, T>;
+
+template <typename T>
+using R1 = varerr::Result<Universe, T, E<0>>;
+
+template <typename T>
+using R2 = varerr::Result<Universe, T, E<0>, E<1>>;
+
+template <typename T>
+using R3 = varerr::Result<Universe, T, E<0>, E<1>, E<2>>;
+
+} // namespace
+
+TEST_CASE("result_functional_access", "[result][functional]") {
+
+    auto res0 = R0<int>(42); // NOLINT
+    REQUIRE(res0.has_value());
+    REQUIRE(!res0.has_error());
+    REQUIRE(res0.value() == 42);
+    REQUIRE(res0.value_if() != nullptr);
+    REQUIRE(*res0.value_if() == 42);
+    REQUIRE(!res0.holds_error<E<0>>());
+
+    auto res1 = R2<int>(42); // NOLINT
+    REQUIRE(res1.has_value());
+    REQUIRE(!res1.has_error());
+    REQUIRE(res1.value() == 42);
+    REQUIRE(res1.value_if() != nullptr);
+    REQUIRE(*res1.value_if() == 42);
+    REQUIRE(!res1.holds_error<E<1>>());
+    REQUIRE(!res1.holds_error<E<99>>());
+
+    auto err0 = R2<int>(varerr::Error<E<1>>(42)); // NOLINT
+    REQUIRE(!err0.has_value());
+    REQUIRE(err0.has_error());
+    REQUIRE(err0.holds_error<E<1>>());
+    REQUIRE(!err0.holds_error<E<0>>());
+    REQUIRE(err0.value_if() == nullptr);
+    REQUIRE(err0.error<E<1>>().value_ == 42);
+    REQUIRE(err0.error_if<E<0>>() == nullptr);
+    REQUIRE(err0.error_if<E<1>>()->value_ == 42);
+
+}

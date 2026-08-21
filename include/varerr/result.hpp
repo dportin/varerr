@@ -3,12 +3,14 @@
 
 #include "status.hpp"
 
+#include <cassert>
 #include <cstddef>
-#include <utility>
-#include <expected>
-#include <functional>
+
 #include <concepts>
+#include <expected>
+#include <optional>
 #include <type_traits>
+#include <utility>
 
 namespace varerr {
 
@@ -50,19 +52,9 @@ Error(E&&) -> Error<std::remove_cvref_t<E>>;
 
 namespace detail {
 
-    // template <typename W, typename E>
-    // static constexpr bool is_nothrow_copy_constructible_from_unexpected_v =
-    //     std::is_nothrow_copy_constructible_v<E> &&
-    //     std::is_nothrow_constructible_v<W, std::unexpected<E>>;
-
-    // template <typename W, typename E>
-    // static constexpr bool is_nothrow_move_constructible_from_unexpected_v = 
-    //     std::is_nothrow_move_constructible_v<E> /* redundant */ &&
-    //     std::is_nothrow_constructible_v<W, std::unexpected<E>>;
-
     template <typename R, typename T, IsTriviallyStorable... Es>
     requires IsNormalizedPack<R, Es...>
-    struct ResultImpl {
+    struct ResultImpl final {
 
         using ValueType = T;
         using ErrorType = detail::StatusImpl<R, Es...>;
@@ -70,34 +62,88 @@ namespace detail {
 
         // Construct a ResultImpl from a T.
 
-        // TODO
+        explicit constexpr ResultImpl(const T& r)
+        noexcept(noexcept(ResultType(r))) :
+            result_(r) {}
+
+        explicit constexpr ResultImpl(T&& r)
+        noexcept(noexcept(ResultType(r))) :
+            result_(std::move(r)) {}
 
         // Construct a ResultImpl from an Error.
 
         template <typename E>
         requires row_elem_normalized_v<R, E, Row<Es...>> /* lifted */
         constexpr ResultImpl(const Error<E>& e)
-        // noexcept(is_nothrow_copy_constructible_from_unexpected_v<ResultType, E>) :
         noexcept(noexcept(ResultType(std::unexpected(std::declval<const E&>())))) :
             result_(std::unexpected(e.unwrap())) {}
         
         template <typename E>
         requires row_elem_normalized_v<R, E, Row<Es...>> /* lifted */
         constexpr ResultImpl(Error<E>&& e)
-        // noexcept(is_nothrow_move_constructible_from_unexpected_v<ResultType, E>) :
         noexcept(noexcept(ResultType(std::unexpected(std::declval<E&&>())))) :
             result_(std::unexpected(std::move(e).unwrap())) {}
+
+        // TODO: Consider providing a static factory method to emplace-construct
+        // an unexpected/error.
+
+        // Boolean observers
 
         [[nodiscard]] constexpr bool has_value() const noexcept {
             return this->result_.has_value();
         }
 
-        [[nodiscard]] constexpr bool has_error() const noexcept {
-            return this->result_.has_error();
+        [[nodiscard]] constexpr explicit operator bool() const noexcept {
+            return this->has_value();
         }
 
-        // TODO: value
-        // TODO: error
+        [[nodiscard]] constexpr bool has_error() const noexcept {
+            return !this->has_value();
+        }
+
+        template <typename E>
+        [[nodiscard]] constexpr bool holds_error() const noexcept {
+            if constexpr (row_elem_normalized_v<R, E, Row<Es...>>) {
+                return this->has_error() && this->status().template holds<E>();
+            } else {
+                return false;
+            }
+        }
+
+        // Value accessors
+
+        template <typename Self>
+        // NOLINTNEXTLINE(cppcoreguidelines-missing-std-forward)
+        [[nodiscard]] constexpr auto&& value(this Self&& self) {
+            assert(self.result_.has_value());
+            return std::forward_like<Self>(*self.result_);
+        }
+
+        template <typename Self>
+        [[nodiscard]] constexpr const_preserving_pointer_t<Self, T> value_if(this Self& self) noexcept {
+            if (self.has_value()) {
+                return std::addressof(*self.result_);
+            } else {
+                return nullptr;
+            }
+        }
+
+        // Error accessors
+
+        template <typename E, typename Self>
+        // NOLINTNEXTLINE(cppcoreguidelines-missing-std-forward)
+        [[nodiscard]] constexpr auto&& error(this Self&& self) {
+            static_assert(row_elem_normalized_v<R, E, Row<Es...>>);            
+            assert(self.template holds_error<E>());
+            return std::forward_like<Self>(*self.status().template get_if<E>());
+        }
+
+        template <typename E, typename Self>
+        [[nodiscard]] constexpr const_preserving_pointer_t<Self, E> error_if(this Self& self) noexcept {
+            static_assert(row_elem_normalized_v<R, E, Row<Es...>>);
+            return self.status().template get_if<E>();
+        }
+
         // TODO: and_then
         // TODO: transform
         // TODO: handle
@@ -105,20 +151,30 @@ namespace detail {
 
         private:
 
+        [[nodiscard]] const ErrorType& status() const & {
+            assert(this->has_error());
+            return this->result_.error();
+        }
+
+        [[nodiscard]] ErrorType& status() & {
+            assert(this->has_error());
+            return this->result_.error();
+        }
+
         ResultType result_;
 
     };
 
     // Unpack a Row into a ResultImpl.
 
-    template <typename R, typename U>
+    template <typename R, typename T, typename U>
     struct result_row_adapter;
 
-    template <typename R, typename... Es>
-    struct result_row_adapter<R, Row<Es...>> : std::type_identity<ResultImpl<R, Es...>> {};
+    template <typename R, typename T, typename... Es>
+    struct result_row_adapter<R, T, Row<Es...>> : std::type_identity<ResultImpl<R, T, Es...>> {};
 
-    template <typename R, typename U>
-    using result_row_adapter_t = typename result_row_adapter<R, U>::type;
+    template <typename R, typename T, typename U>
+    using result_row_adapter_t = typename result_row_adapter<R, T, U>::type;
 
 } // namespace detail
 
@@ -129,7 +185,7 @@ namespace detail {
 
 template <typename R, typename T, IsTriviallyStorable... Es>
 requires detail::IsRankedPack<R, Es...>
-using Result = detail::result_row_adapter<R, detail::pack_normalize_t<R, Es...>>;
+using Result = detail::result_row_adapter_t<R, T, detail::pack_normalize_t<R, Es...>>;
 
 } // namespace varerr
 

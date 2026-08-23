@@ -3,6 +3,7 @@
 
 #include <cassert>
 #include <cstddef>
+#include <cstdint>
 
 #include <algorithm>
 #include <array>
@@ -11,6 +12,7 @@
 #include <memory>
 #include <numeric>
 #include <optional>
+#include <span>
 #include <type_traits>
 #include <utility>
 
@@ -205,6 +207,17 @@ template <typename R, typename E>
 requires IsRanked<R, E>
 inline constexpr std::size_t rank_v = R::template rank<E>;
 
+// The size of a row
+
+template <typename U>
+struct row_size;
+
+template <typename... Es>
+struct row_size<Row<Es...>> : std::integral_constant<std::size_t, sizeof...(Es)> {};
+
+template <IsRow U>
+inline constexpr std::size_t row_size_v = row_size<U>::value;
+
 // Determine whether a parameter pack is normalized.
 
 namespace detail {
@@ -238,6 +251,29 @@ inline constexpr bool is_normalized_row_v<R, Row<Es...>> = detail::is_normalized
 
 template <typename R, typename U>
 concept IsNormalizedRow = IsRankedRow<R, U> && is_normalized_row_v<R, U>;
+
+// Compute an array of ranks from a parameter pack.
+
+namespace detail {
+
+    template <typename M, typename... Es>
+    requires IsRankedPack<M, Es...>
+    inline constexpr auto pack_ranks_v = std::array<std::size_t, sizeof...(Es)> { rank_v<M, Es>... };
+
+    template <typename M, typename U>
+    struct row_ranks;
+
+    template <typename M, typename... Es>
+    requires IsRankedPack<M, Es...>
+    struct row_ranks<M, Row<Es...>> {
+        static constexpr auto value = pack_ranks_v<M, Es...>;
+    };
+
+    template <typename M, typename U>
+    requires IsRankedRow<M, U>
+    inline constexpr auto row_ranks_v = row_ranks<M, U>::value;
+
+} // namespace detail
 
 // Determine the position of an alternative in a parameter pack.
 
@@ -363,6 +399,10 @@ template <typename R, typename U, typename V>
 requires IsNormalizedRow<R, U> && IsNormalizedRow<R, V>
 inline constexpr bool row_equiv_normalized_v = detail::row_equiv_normalized_impl<R>(U {}, V {});
 
+template <typename R, typename U, typename V>
+requires IsNormalizedRow<R, U> && IsNormalizedRow<R, V>
+inline constexpr bool row_proper_subset_normalized_v = row_subset_normalized_v<R, U, V> && !row_equiv_normalized_v<R, U, V>;
+
 // The status type is parameterized over normalized parameter packs.
 
 namespace detail {
@@ -383,7 +423,7 @@ namespace detail {
     template <std::size_t N, typename F>
     requires (N > 0)
     [[nodiscard]] constexpr decltype(auto) dispatch_linear_dense(std::size_t n, F&& f)
-    noexcept(is_nothrow_invocable_over_index_sequence_v<F, N>) /* conservative */ {
+    noexcept(is_nothrow_invocable_over_index_sequence_v<F, N>) {
 
         assert(n < N); /* precondition */
 
@@ -403,7 +443,7 @@ namespace detail {
     template <std::size_t N, typename F>
     requires (N > 0)
     [[nodiscard]] constexpr decltype(auto) dispatch(std::size_t n, F&& f)
-    noexcept(is_nothrow_invocable_over_index_sequence_v<F, N>) /* conservative */ {
+    noexcept(is_nothrow_invocable_over_index_sequence_v<F, N>) {
         return dispatch_linear_dense<N>(n, std::forward<F>(f));
     }
 
@@ -418,10 +458,22 @@ namespace detail {
     requires IsNormalizedPack<R, Es...>
     struct StatusImpl final {
 
-        static_assert(sizeof...(Es) > 0);
-
         using TagType = std::size_t;
         using StorageType = Storage<Es...>;
+
+        // Ensure class invariants are satisfied.
+
+        static_assert(sizeof...(Es) > 0,
+            "StatusImpl<R, Es...>: alternatives must be non-empty");
+
+        static_assert((std::is_trivially_destructible_v<Es> && ...),
+            "StatusImpl<R, Es...>: alternatives must be trivially destructible");
+
+        static_assert((std::is_nothrow_copy_constructible_v<Es> && ...),
+            "StatusImpl<R, Es...>: alternatives must be nothrow copy-constructible");
+
+        static_assert((std::is_nothrow_move_constructible_v<Es> && ...),
+            "StatusImpl<R, Es...>: alternatives must be nothrow move-constructible");
 
         // Construct a StatusImpl from an alternative.
 
@@ -433,8 +485,13 @@ namespace detail {
             active_(row_index_normalized_v<R, E, Row<Es...>>),
             alternatives_(std::in_place_index<row_index_normalized_v<R, E, Row<Es...>>>, std::forward<Args>(args)...) {}
 
+        // TODO: Remove the StatusImpl(E&&) constructor, which exists primarily
+        // to enable the ResultImpl(Error<E>&&) and ResultImpl(const Error<E>&)
+        // constructors. It overlaps with the copy and move constructors and is
+        // ambiguous (and at most wrong) when E is the StatusImpl type itself.
+
         template <typename E>
-        requires row_elem_normalized_v<R, E, Row<Es...>>
+        requires row_elem_normalized_v<R, std::remove_cvref_t<E>, Row<Es...>>
         constexpr StatusImpl(E&& e)
         noexcept(std::is_nothrow_constructible_v<std::remove_cvref_t<E>, E>) :
             StatusImpl(std::in_place_type<std::remove_cvref_t<E>>, std::forward<E>(e)) {}
@@ -443,15 +500,17 @@ namespace detail {
 
         template <IsTriviallyStorable... Fs>
         requires IsNormalizedPack<R, Fs...> &&
-                 row_subset_normalized_v<R, Row<Fs...>, Row<Es...>> /* lifted */
-        constexpr StatusImpl(const StatusImpl<R, Fs...>& other) noexcept :
-            active_(0), alternatives_() {
-                other.visit([this]<typename E>(const E& e) -> void {
-                    constexpr std::size_t I = row_index_normalized_v<R, E, Row<Es...>>;
-                    this->active_ = I;
-                    storage_emplace<I>(this->alternatives_, e);
-                });
-            }
+                row_proper_subset_normalized_v<R, Row<Fs...>, Row<Es...>>
+        constexpr StatusImpl(const StatusImpl<R, Fs...>& other) noexcept /* triviality */ :
+            active_{}, alternatives_{} /* dead initialization */ {
+
+            other.visit([this]<typename E>(const E& e) -> void {
+                constexpr std::size_t I = row_index_normalized_v<R, E, Row<Es...>>;
+                this->active_ = I;
+                storage_emplace<I>(this->alternatives_, e);
+            });
+
+        }
 
         // Return pointer to underlying storage by type.
 
@@ -472,7 +531,7 @@ namespace detail {
 
         template <typename F>
         constexpr decltype(auto) visit(F&& f) const
-        noexcept(is_nothrow_visitable_v<F, Es...>) /* conservative */ {
+        noexcept(is_nothrow_visitable_v<F, Es...>) {
             return dispatch<sizeof...(Es)>(
                 this->active_,
                 [&]<std::size_t I>(std::integral_constant<std::size_t, I>) -> decltype(auto) {
@@ -505,7 +564,7 @@ namespace detail {
         // StatusImpl<R> is uninhabited: no value of this type should exist be-
         // cause the empty row has no alternatives. The copy and move construc-
         // tors are defaulted only because std::expected expects copy construc-
-        // tibility.
+        // tibility. The noexcept specifications are for documentary purposes.
 
         StatusImpl() = delete;
 
@@ -518,6 +577,21 @@ namespace detail {
         ~StatusImpl() noexcept = default;
 
     };
+
+    template <typename M, typename U>
+    struct status_impl_pack_adapter;
+
+    template <typename M, IsTriviallyStorable... Es>
+    requires IsRankedPack<M, Es...>
+    struct status_impl_pack_adapter<M, Row<Es...>> : std::type_identity<StatusImpl<M, Es...>> {};
+
+    // TODO: We probably want to define generic "IsErrorPack" and "IsErrorRow"
+    // concepts that assert that a pack or row is normalized and trivially stor-
+    // able; below we have trouble asserting IsTriviallyStorable on the row.
+
+    template <typename M, typename U>
+    requires IsNormalizedRow<M, U>
+    using status_impl_pack_adapter_t = status_impl_pack_adapter<M, U>::type;
 
     // Normalized parameter pack by rank.
 
@@ -553,6 +627,12 @@ namespace detail {
     // Index into a template parameter pack. Falls back to std::tuple_element_t
     // if the compiler does not have a pack indexing builtin (MSVC, AppleClang).
 
+    // TODO: disable -Wc++26-extensions
+
+    // #if defined(__cpp_pack_indexing) && __cpp_pack_indexing >= 202311L
+    // template <std::size_t I, typename... Ts>
+    // using type = Ts...[I];
+
     #if defined(__has_builtin) && __has_builtin(__type_pack_element)
     template <std::size_t I, typename... Ts>
     using pack_subscript_t = __type_pack_element<I, Ts...>;
@@ -560,6 +640,15 @@ namespace detail {
     template <std::size_t I, typename... Ts>
     using pack_subscript_t = std::tuple_element_t<I, std::tuple<Ts...>>;
     #endif
+
+    template <std::size_t I, typename U>
+    struct row_subscript;
+
+    template <std::size_t I, typename... Es>
+    struct row_subscript<I, Row<Es...>> : std::type_identity<pack_subscript_t<I, Es...>> {};
+
+    template <std::size_t I, IsRow U>
+    using row_subscript_t = row_subscript<I, U>::type;
 
     template <typename R, typename... Es>
     requires IsRankedPack<R, Es...>
@@ -602,6 +691,152 @@ namespace detail {
 template <typename R, typename U>
 requires IsRankedRow<R, U>
 using row_normalize_t = detail::row_normalize<R, U>::type;
+
+// Compute the union, intersection and difference of two or more rows.
+
+enum class MergeOp : std::uint8_t { Union, Intersection, Difference };
+
+namespace detail {
+
+    // Track the source of an index when merging parameter packs.
+
+    struct MergeStep {
+        std::size_t index;
+        std::size_t source;
+    };
+
+    // Bound the number of merge steps by the sum of the sizes of the parameter
+    // packs.
+
+    template <std::size_t N>
+    struct MergePlan {
+        std::size_t size;
+        std::array<MergeStep, N> steps;
+    };
+
+    // Naive (linear) merge with union, intersection and difference operations.
+
+    template <MergeOp Op, typename M, typename... Rows>
+    requires (IsNormalizedRow<M, Rows> && ...)
+    [[nodiscard]] consteval auto merge_normalized_rows_linear_impl() {
+
+        constexpr std::size_t num_rows = sizeof...(Rows);
+        constexpr std::size_t num_ranks_max = std::size_t {0} + (row_size_v<Rows> + ...);
+
+        // Ragged array of ranks.
+
+        const std::array<std::span<const std::size_t>, num_rows> ranks_table {
+            std::span<const std::size_t> { row_ranks_v<M, Rows> }...
+        };
+
+        MergePlan<num_ranks_max> merge_plan {};
+        std::array<std::size_t, num_rows> ranks_table_col {};
+
+        while (true) {
+
+            std::size_t min_rank = 0;
+            std::size_t min_rank_row = num_rows; /* sentinel */
+
+            for (std::size_t row = 0; row < num_rows; ++row) {
+
+                if (ranks_table_col[row] == ranks_table[row].size()) {
+                    continue;
+                }
+
+                const std::size_t rank = ranks_table[row][ranks_table_col[row]];
+
+                if (min_rank_row == num_rows || rank < min_rank) {
+                    min_rank = rank;
+                    min_rank_row = row;
+                }
+
+            }
+
+            // If the frontier is empty then there are no more elements to con-
+            // sider.
+
+            if (min_rank_row == num_rows) {
+                break;
+            }
+
+            // If the frontier is non-empty then min_rank is the minimum rank at
+            // row min_rank_row and index min_rank_col.
+
+            std::size_t min_rank_col = ranks_table_col[min_rank_row];
+
+            // Count the number of occurrences of min_rank on the frontier. This
+            // could be merged with the de-duplication pass but the performance
+            // gain is minimal in practice and separate passes is much clearer.
+
+            std::size_t num_min_rank_frontier = 0;
+            for (std::size_t row = 0; row < num_rows; ++row) {
+                if (ranks_table_col[row] != ranks_table[row].size() &&
+                    ranks_table[row][ranks_table_col[row]] == min_rank) {
+                    ++num_min_rank_frontier;
+                }
+            }
+
+            bool add_merge_step = false;
+            if constexpr (Op == MergeOp::Union) {
+                add_merge_step = true;
+            } else if constexpr (Op == MergeOp::Intersection) {
+                add_merge_step = num_min_rank_frontier == num_rows;
+            } else if constexpr (Op == MergeOp::Difference) {
+                add_merge_step = min_rank_row == 0 && num_min_rank_frontier > 0;
+            } else {
+                std::unreachable();
+            }
+
+            if (add_merge_step) {
+                merge_plan.steps[merge_plan.size++] = MergeStep {
+                    .index = min_rank_col,
+                    .source = min_rank_row
+                };
+            }
+
+            // Ensure the emitted rank indices are de-duplicated.
+
+            for (std::size_t row = 0; row < num_rows; ++row) {
+                while (ranks_table_col[row] != ranks_table[row].size() &&
+                       ranks_table[row][ranks_table_col[row]] == min_rank) {
+                    ++ranks_table_col[row];
+                }
+            }
+
+        }
+
+        return merge_plan;
+
+    }
+
+    template <MergeOp Op, typename M, typename... Rows>
+    requires (IsNormalizedRow<M, Rows> && ...)
+    struct merge_normalized_rows_linear {
+
+        static constexpr auto merge_plan = merge_normalized_rows_linear_impl<Op, M, Rows...>();
+        static constexpr auto merge_size = merge_plan.size;
+        static constexpr auto merge_steps = merge_plan.steps;
+
+        using type = decltype(
+            []<std::size_t... Is>(std::index_sequence<Is...>) {
+                return []<MergeStep... Ms>() ->Row<row_subscript_t<Ms.index, pack_subscript_t<Ms.source, Rows...>>...> {
+                    return {};
+                }.template operator()<merge_steps[Is]...>();
+            }(std::make_index_sequence<merge_size> {})
+        );
+
+    };
+
+} // namespace detail
+
+template <typename M, typename... Rows>
+using row_union_normalized_t = detail::merge_normalized_rows_linear<MergeOp::Union, M, Rows...>::type;
+
+template <typename M, typename... Rows>
+using row_intersection_normalized_t = detail::merge_normalized_rows_linear<MergeOp::Intersection, M, Rows...>::type;
+
+template <typename M, typename... Rows>
+using row_difference_t = detail::merge_normalized_rows_linear<MergeOp::Difference, M, Rows...>::type;
 
 namespace detail {
 

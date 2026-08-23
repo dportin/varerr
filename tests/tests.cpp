@@ -1,5 +1,7 @@
 #include <catch2/catch_test_macros.hpp>
 
+#include "include/lifetime.hpp"
+
 #include <varerr/status.hpp>
 #include <varerr/result.hpp>
 
@@ -452,5 +454,78 @@ TEST_CASE("result_functional_transform", "[result][functional]") {
     REQUIRE(!err2.has_value());
     REQUIRE(err2.holds_error<E<1>>());
     REQUIRE(err2.error<E<1>>().value_ == 42);
+    
+}
+
+TEST_CASE("result_functional_transform_lifetime", "[result][functional]") {
+
+    lifetime::Counts global {};
+    using TrackedR = lifetime::Tracked<int>;
+    using TrackingR = varerr::Result<Universe, TrackedR, E<0>, E<1>, E<2>>;
+
+    TrackingR tracked0 = TrackingR(TrackedR(&global, 5)); // NOLINT
+
+    REQUIRE(tracked0.value().local().copy_constructed == 0);
+    REQUIRE(tracked0.value().local().move_constructed == 1);
+    
+    TrackingR tracked1 = tracked0.transform([](TrackedR& tracked) { tracked.value()++; return tracked; });
+    
+    REQUIRE(tracked1.value().local().copy_constructed == 1); /* parameter is an lvalue */
+    REQUIRE(tracked1.value().local().move_constructed == 2); /* result is moved */
+
+    TrackingR tracked2 = std::move(tracked1).transform([](TrackedR&& tracked) { std::move(tracked).value()++; return tracked; });
+
+    REQUIRE(tracked2.value().local().copy_constructed == 1);
+    REQUIRE(tracked2.value().local().move_constructed == 4); /* parameter is an rvalue and result is moved */
+
+    TrackingR tracked3 = tracked2.transform([](TrackedR& tracked) { tracked.value()++; return tracked; })
+                                 .transform([](TrackedR&& tracked) { std::move(tracked).value()++; return tracked; })
+                                 .transform([](TrackedR&& tracked) { std::move(tracked).value()++; return tracked; });
+
+    REQUIRE(tracked3.value().local().copy_constructed == 2);
+    REQUIRE(tracked3.value().local().move_constructed == 9);
+
+}
+
+// TODO: Enumerate all combinations from a small universe E<0>, E<1>, ...
+
+TEST_CASE("row_operations_spot_test", "[row]") {
+   
+    STATIC_REQUIRE(std::same_as<
+        varerr::row_union_normalized_t<Universe,
+            varerr::Row<E<0>>,
+            varerr::Row<E<1>>
+        >,
+        varerr::Row<E<0>, E<1>>
+    >);
+
+    STATIC_REQUIRE(std::same_as<
+        varerr::row_union_normalized_t<Universe,
+            varerr::Row<E<0>, E<1>, E<7>>,
+            varerr::Row<E<1>, E<5>, E<7>, E<9>>
+        >,
+        varerr::Row<E<0>, E<1>, E<5>, E<7>, E<9>>
+    >);
+
+}
+
+TEST_CASE("result_functional_and_then", "[result][functional]") {
+
+
+    using R0 = varerr::Result<Universe, short, E<1>, E<2>, E<3>>;
+    using R1 = varerr::Result<Universe, int, E<0>, E<2>, E<4>>;
+
+    R0 result0 = R0(5);
+    auto result1 = result0.and_then([](short n) -> R1 {
+        return R1(static_cast<int>(n) + 1);
+    });
+
+    REQUIRE(result1.has_value());
+    REQUIRE(result1.value() == 6);
+    
+    STATIC_REQUIRE(std::same_as<
+        decltype(result1),
+        varerr::Result<Universe, int, E<0>, E<1>, E<2>, E<3>, E<4>>
+    >);
     
 }

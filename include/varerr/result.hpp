@@ -31,7 +31,7 @@ struct Error {
     [[nodiscard]] constexpr const E& unwrap() const & {
         return this->error_;
     }
-    
+
     [[nodiscard]] constexpr E&& unwrap() && {
         return std::move(this->error_);
     }
@@ -64,6 +64,58 @@ namespace detail {
     template <typename F, typename Self, typename T>
     using forwarding_voidable_invoke_result_t = forwarding_voidable_invoke_result<F, Self, T>::type;
 
+    // Destructure a ResultImpl into its components.
+
+    template <typename M, typename T, IsTriviallyStorable... Es>
+    requires IsNormalizedPack<M, Es...>
+    struct ResultImpl;
+
+    template <typename X>
+    struct result_impl_traits;
+
+    template <typename M, typename T, typename... Es>
+    struct result_impl_traits<ResultImpl<M, T, Es...>> {
+
+        using UniverseType = M;
+        using ValueType = T;
+        using RowType = Row<Es...>;
+
+        template <typename R, typename U>
+        struct rebind_row_adapter;
+
+        template <typename R, typename... Fs>
+        struct rebind_row_adapter<R, Row<Fs...>> : std::type_identity<ResultImpl<M, R, Fs...>> {};
+
+        template <typename R, typename U>
+        using rebind = rebind_row_adapter<R, U>::type;
+
+    };
+
+    // Determine whether a type is a ResultImpl.
+
+    template <typename X>
+    inline constexpr bool is_result_impl_v = false;
+
+    template <typename M, typename T, typename... Es>
+    inline constexpr bool is_result_impl_v<ResultImpl<M, T, Es...>> = true;
+
+    template <typename X>
+    concept IsResult = is_result_impl_v<X>;
+
+    template <IsResult X>
+    using result_universe_t = result_impl_traits<std::remove_cvref_t<X>>::UniverseType;
+
+    template <IsResult X>
+    using result_value_t = result_impl_traits<std::remove_cvref_t<X>>::ValueType;
+
+    template <IsResult X>
+    using result_row_t = result_impl_traits<std::remove_cvref_t<X>>::RowType;
+
+    template <IsResult X, typename R, IsRow U>
+    using result_rebind_t = result_impl_traits<std::remove_cvref_t<X>>::template rebind<R, U>;
+
+    // The main result type.
+
     template <typename M, typename T, IsTriviallyStorable... Es>
     requires IsNormalizedPack<M, Es...>
     struct ResultImpl final {
@@ -88,20 +140,37 @@ namespace detail {
 
         // Construct a ResultImpl from an Error.
 
+        // TODO: the Error<E> constructors depend on the StatusImpl(E&&) forwar-
+        // ding constructor, which overlaps in some cases with the default copy
+        // and move constructors. Consider a different design here.
+
         template <typename E>
-        requires row_elem_normalized_v<M, E, Row<Es...>> /* lifted */
+        requires row_elem_normalized_v<M, E, Row<Es...>>
         constexpr ResultImpl(const Error<E>& e)
-        noexcept(noexcept(ResultType(std::unexpected(std::declval<const E&>())))) :
+        noexcept(noexcept(ResultType(std::unexpected(std::declval<const E&>())))) /* TODO: noexcept(true) */ :
             result_(std::unexpected(e.unwrap())) {}
-        
+
         template <typename E>
-        requires row_elem_normalized_v<M, E, Row<Es...>> /* lifted */
+        requires row_elem_normalized_v<M, E, Row<Es...>>
         constexpr ResultImpl(Error<E>&& e)
-        noexcept(noexcept(ResultType(std::unexpected(std::declval<E&&>())))) :
+        noexcept(noexcept(ResultType(std::unexpected(std::declval<E&&>())))) /* TODO: noexcept(true) */ :
             result_(std::unexpected(std::move(e).unwrap())) {}
 
-        // TODO: Consider providing a static factory method to emplace-construct
-        // an unexpected/error.
+        // Implicit widening constructor.
+
+        template <IsTriviallyStorable... Fs>
+        requires IsNormalizedPack<M, Fs...> &&
+                 row_subset_normalized_v<M, Row<Fs...>, Row<Es...>>
+        constexpr ResultImpl(const ResultImpl<M, T, Fs...>& other)
+        noexcept(noexcept(widen(other))) :
+            result_(widen(other)) {}
+
+        template <IsTriviallyStorable... Fs>
+        requires IsNormalizedPack<M, Fs...> &&
+                 row_subset_normalized_v<M, Row<Fs...>, Row<Es...>>
+        constexpr ResultImpl(ResultImpl<M, T, Fs...>&& other)
+        noexcept(noexcept(widen(std::move(other)))) :
+            result_(widen(std::move(other))) {}
 
         // Boolean observers
 
@@ -149,7 +218,7 @@ namespace detail {
         template <typename E, typename Self>
         // NOLINTNEXTLINE(cppcoreguidelines-missing-std-forward)
         [[nodiscard]] constexpr auto&& error(this Self&& self) {
-            static_assert(row_elem_normalized_v<M, E, Row<Es...>>);            
+            static_assert(row_elem_normalized_v<M, E, Row<Es...>>);
             assert(self.template holds_error<E>());
             return std::forward_like<Self>(*self.status().template get_if<E>());
         }
@@ -165,10 +234,10 @@ namespace detail {
         template <typename Self, typename F>
         [[nodiscard]] auto /* prvalue */ transform(this Self&& self, F&& f) {
 
-            // transform :: Result<R, T, Es...> ->
-            //              (R -> S) ->
-            //              Result<R, S, Es...>
-            
+            // transform :: Result<M, T, U> ->
+            //              (T -> S) ->
+            //              Result<M, S, V>
+
             using InvokeF = std::remove_cvref_t<forwarding_voidable_invoke_result_t<F, Self, T>>; /* decayed */
             using ResultF = ResultImpl<M, InvokeF, Es...>;
 
@@ -176,7 +245,7 @@ namespace detail {
                 return ResultF(std::unexpect, std::forward<Self>(self).status());
             }
 
-            auto invoke = [&f, &self]() -> decltype(auto) {
+            const auto invoke = [&f, &self]() -> decltype(auto) /* decayed */ {
                 if constexpr (std::is_void_v<T>) {
                     return std::invoke(std::forward<F>(f));
                 } else {
@@ -191,8 +260,38 @@ namespace detail {
             }
 
         }
-        
-        // TODO: and_then
+
+        // The and_then (bind) combinator.
+
+        template <typename Self, typename F>
+        [[nodiscard]] auto /* prvalue */ and_then(this Self&& self, F&& f) {
+
+            // and_then :: Result<M, T, U> ->
+            //             T -> Result<M, S, V> ->
+            //             Result<M, S, U + V>
+
+            using InvokeF = std::remove_cvref_t<forwarding_voidable_invoke_result_t<F, Self, T>>; /* decayed */
+
+            static_assert(is_result_impl_v<InvokeF>, "and_then: F must return a ResultImpl");
+            static_assert(std::same_as<result_universe_t<InvokeF>, M>, "and_then: F must preserve the universe M");
+            static_assert(is_normalized_row_v<M, result_row_t<InvokeF>>, "and_then: F must return a normalized error row");
+
+            using ErrRowF = row_union_normalized_t<M, Row<Es...>, result_row_t<InvokeF>>;
+            using StatusF = status_impl_pack_adapter_t<M, ErrRowF>;
+            using ResultF = result_rebind_t<InvokeF, result_value_t<InvokeF>, ErrRowF>;
+
+            if (self.has_error()) [[unlikely]] {
+                return ResultF(std::unexpect, StatusF(std::forward<Self>(self).status()));
+            }
+
+            if constexpr (std::is_void_v<T>) {
+                return ResultF(std::invoke(std::forward<F>(f)));
+            } else {
+                return ResultF(std::invoke(std::forward<F>(f), std::forward<Self>(self).value()));
+            }
+
+        }
+
         // TODO: handle
         // TODO: unject
 
@@ -208,6 +307,8 @@ namespace detail {
             return this->result_.error();
         }
 
+        // Construct a ResultImpl from a std::expected.
+
         template <typename... Args>
         constexpr ResultImpl(std::in_place_t, Args&&... args)
         noexcept(noexcept(ResultType(std::in_place, std::forward<Args>(args)...)))
@@ -217,6 +318,19 @@ namespace detail {
         constexpr ResultImpl(std::unexpect_t, S&& status)
         noexcept(noexcept(ResultType(std::unexpect, std::forward<S>(status))))
             : result_(std::unexpect, std::forward<S>(status)) {}
+
+        // Explicit widening helper
+
+        template <typename Other> /* unconstrained */
+        [[nodiscard]] static constexpr ResultType widen(Other&& other)
+        // noexcept(std::is_nothrow_constructible_v<T, decltype(std::forward<Other>(other).value())>)
+        noexcept(noexcept(ResultType(std::in_place, std::forward<Other>(other).value()))) {
+            if (other.has_value()) {
+                return ResultType(std::in_place, std::forward<Other>(other).value());
+            } else {
+                return ResultType(std::unexpect, StatusImpl<M, Es...>(std::forward<Other>(other).status())); /* noexcept */
+            }
+        }
 
         ResultType result_;
 

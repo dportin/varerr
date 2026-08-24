@@ -199,7 +199,7 @@ namespace {
 
     template <std::size_t N>
     struct E {
-        
+
         std::size_t value_;
 
         constexpr E(std::size_t n) noexcept :
@@ -207,7 +207,7 @@ namespace {
 
         template <std::size_t>
         friend struct E;
-    
+
     };
 
     template <std::size_t N, std::size_t M>
@@ -350,7 +350,7 @@ TEST_CASE("status_impl_normalize", "[status][impl][functional]") {
 }
 
 TEST_CASE("result_error_functional_deduction", "[result][error][functional]") {
-    
+
     auto infer0 = varerr::Error(static_cast<short>(4));
     STATIC_REQUIRE(std::same_as<varerr::Error<short>, decltype(infer0)>);
 
@@ -454,7 +454,7 @@ TEST_CASE("result_functional_transform", "[result][functional]") {
     REQUIRE(!err2.has_value());
     REQUIRE(err2.holds_error<E<1>>());
     REQUIRE(err2.error<E<1>>().value_ == 42);
-    
+
 }
 
 TEST_CASE("result_functional_transform_lifetime", "[result][functional]") {
@@ -467,9 +467,9 @@ TEST_CASE("result_functional_transform_lifetime", "[result][functional]") {
 
     REQUIRE(tracked0.value().local().copy_constructed == 0);
     REQUIRE(tracked0.value().local().move_constructed == 1);
-    
+
     TrackingR tracked1 = tracked0.transform([](TrackedR& tracked) { tracked.value()++; return tracked; });
-    
+
     REQUIRE(tracked1.value().local().copy_constructed == 1); /* parameter is an lvalue */
     REQUIRE(tracked1.value().local().move_constructed == 2); /* result is moved */
 
@@ -490,7 +490,7 @@ TEST_CASE("result_functional_transform_lifetime", "[result][functional]") {
 // TODO: Enumerate all combinations from a small universe E<0>, E<1>, ...
 
 TEST_CASE("row_operations_spot_test", "[row]") {
-   
+
     STATIC_REQUIRE(std::same_as<
         varerr::row_union_normalized_t<Universe,
             varerr::Row<E<0>>,
@@ -522,10 +522,38 @@ TEST_CASE("result_functional_and_then", "[result][functional]") {
 
     REQUIRE(result1.has_value());
     REQUIRE(result1.value() == 6);
-    
+
     STATIC_REQUIRE(std::same_as<
         decltype(result1),
         varerr::Result<Universe, int, E<0>, E<1>, E<2>, E<3>, E<4>>
     >);
-    
+
+}
+
+TEST_CASE("result_functional_handle", "[result][functional]") {
+
+    // Just checking the basic functionality...
+
+    using R0 = varerr::Result<Universe, std::size_t>;
+    using R1 = varerr::Result<Universe, std::size_t, E<0>>;
+
+    R1 result0 = R1(varerr::Error<E<0>>(42));
+
+    REQUIRE(result0.holds_error<E<0>>());
+    REQUIRE(result0.error<E<0>>().value_ == 42);
+
+    R1 handled0 = result0.handle<E<0>>([](const E<0>& e) -> R1 {
+        return R1(e.value_);
+    });
+
+    REQUIRE(handled0.has_value());
+    REQUIRE(handled0.value() == 42);
+
+    R0 handled1 = result0.handle<E<0>>([](const E<0>& e) -> R0 {
+        return R0(e.value_);
+    });
+
+    REQUIRE(handled1.has_value());
+    REQUIRE(handled1.value() == 42);
+
 }

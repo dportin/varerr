@@ -94,13 +94,18 @@ namespace detail {
     // Determine whether a type is a ResultImpl.
 
     template <typename X>
-    inline constexpr bool is_result_impl_v = false;
+    inline constexpr bool is_result_impl_exact_v = false;
 
     template <typename M, typename T, typename... Es>
-    inline constexpr bool is_result_impl_v<ResultImpl<M, T, Es...>> = true;
+    inline constexpr bool is_result_impl_exact_v<ResultImpl<M, T, Es...>> = true;
+
+    template <typename X>
+    inline constexpr bool is_result_impl_v = is_result_impl_exact_v<std::remove_cvref_t<X>>;
 
     template <typename X>
     concept IsResult = is_result_impl_v<X>;
+
+    // Helpers for destructuring a ResultImpl.
 
     template <IsResult X>
     using result_universe_t = result_impl_traits<std::remove_cvref_t<X>>::UniverseType;
@@ -113,6 +118,46 @@ namespace detail {
 
     template <IsResult X, typename R, IsRow U>
     using result_rebind_t = result_impl_traits<std::remove_cvref_t<X>>::template rebind<R, U>;
+
+    // Determine whether a handler is invocable at a point.
+
+    template <typename Self, typename E>
+    using handler_argument_t = decltype(std::forward_like<Self>(std::declval<E&>()));
+
+    template <typename H, typename Self, typename E>
+    using handler_invoke_result_t = std::invoke_result_t<H, handler_argument_t<Self, E>>;
+
+    template <typename H, typename Self, typename E>
+    inline constexpr bool is_handler_invocable_v = std::is_invocable_v<H, handler_argument_t<Self, E>>;
+
+    // Determine whether a handler is valid at a point.
+
+    template <typename H, typename Self, typename E>
+    inline constexpr bool is_handler_branch_valid_invocable_v =
+        is_handler_invocable_v<H, Self, E>;
+
+    template <typename H, typename Self, typename E>
+    inline constexpr bool is_handler_branch_valid_result_v =
+        is_result_impl_v<std::remove_cvref_t<handler_invoke_result_t<H, Self, E>>>;
+
+    template <typename H, typename Self, typename E>
+    inline constexpr bool is_handler_branch_valid_universe_v = std::same_as<
+        result_universe_t<std::remove_cvref_t<Self>>,
+        result_universe_t<std::remove_cvref_t<handler_invoke_result_t<H, Self, E>>>
+    >;
+
+    template <typename H, typename Self, typename E>
+    inline constexpr bool is_handler_branch_valid_value_v = std::same_as<
+        result_value_t<std::remove_cvref_t<Self>>,
+        result_value_t<std::remove_cvref_t<handler_invoke_result_t<H, Self, E>>>
+    >;
+
+    template <typename H, typename Self, typename E>
+    inline constexpr bool is_handler_branch_valid_v =
+        is_handler_branch_valid_invocable_v<H, Self, E> &&
+        is_handler_branch_valid_result_v<H, Self, E> &&
+        is_handler_branch_valid_universe_v<H, Self, E> &&
+        is_handler_branch_valid_value_v<H, Self, E>;
 
     // The main result type.
 
@@ -160,14 +205,14 @@ namespace detail {
 
         template <IsTriviallyStorable... Fs>
         requires IsNormalizedPack<M, Fs...> &&
-                 row_subset_normalized_v<M, Row<Fs...>, Row<Es...>>
+                 row_proper_subset_normalized_v<M, Row<Fs...>, Row<Es...>>
         constexpr ResultImpl(const ResultImpl<M, T, Fs...>& other)
         noexcept(noexcept(widen(other))) :
             result_(widen(other)) {}
 
         template <IsTriviallyStorable... Fs>
         requires IsNormalizedPack<M, Fs...> &&
-                 row_subset_normalized_v<M, Row<Fs...>, Row<Es...>>
+                 row_proper_subset_normalized_v<M, Row<Fs...>, Row<Es...>>
         constexpr ResultImpl(ResultImpl<M, T, Fs...>&& other)
         noexcept(noexcept(widen(std::move(other)))) :
             result_(widen(std::move(other))) {}
@@ -292,8 +337,76 @@ namespace detail {
 
         }
 
-        // TODO: handle
-        // TODO: unject
+        // The handle (and_then/bind on the error row) combinator.
+
+        template <IsTriviallyStorable... Fs, typename Self, typename H>
+        requires (sizeof...(Fs) > 0) && IsRankedPack<M, Fs...>
+        [[nodiscard]] auto /* prvalue */ handle(this Self&& self, H&& h) {
+
+            // If the handler handles a single alternative we have:
+            //
+            // handle :: Result<M, T, U> ->
+            //           V_i in U -> Result<M, T, W_i> [N_i] ->
+            //           Result<M, T, U \ {E_i} + W_i>
+            //
+            // In particular a handler can return a Result with a narrower, wid-
+            // er or simply different error row. If the handler handles multiple
+            // alternatives we have:
+            //
+            // handle :: Result<M, T, U> ->
+            //           V <= U -> Result<M, T, W> [N]
+            //           Result<M, R, U \ V + W>
+            //
+            // where V is the union of the V_i, W the union of the W_i and N the
+            // sum of the N_i. In this case the value type must be uniform.
+
+            static_assert(IsRankedPack<M, Fs...>,
+                "handle: handled alternatives must be ranked");
+
+            using HandledH = row_normalize_t<M, Row<Fs...>>;
+            using RetainedH = row_difference_t<M, Row<Es...>, HandledH>;
+
+            // Validate the error handler.
+
+            static_assert((is_handler_branch_valid_invocable_v<std::remove_cvref_t<H>, Self, Fs> && ...),
+                "handle: handler must be invocable for each declared alternative");
+
+            static_assert((is_handler_branch_valid_result_v<std::remove_cvref_t<H>, Self, Fs> && ...),
+                "handle: handler must return a result type");
+
+            static_assert((is_handler_branch_valid_universe_v<std::remove_cvref_t<H>, Self, Fs> && ...),
+                "handle: handler must preserve the universe parameter");
+
+            static_assert((is_handler_branch_valid_value_v<std::remove_cvref_t<H>, Self, Fs> && ...),
+                "handle: handler must preserve the value parameter");
+
+            using ErrRowH = row_union_normalized_t<
+                M,
+                RetainedH,
+                result_row_t<handler_invoke_result_t<std::remove_cvref_t<H>, Self, Fs>>...
+            >;
+
+            using StatusH = status_impl_pack_adapter_t<M, ErrRowH>;
+            using ResultH = result_rebind_t<std::remove_cvref_t<Self>, T, ErrRowH>;
+
+            if (self.has_value()) [[likely]] {
+                if constexpr (std::is_void_v<T>) {
+                    return ResultH(std::in_place);
+                } else {
+                    return ResultH(std::in_place, std::forward<Self>(self).value());
+                }
+            }
+
+            // NOLINTNEXTLINE(cppcoreguidelines-missing-std-forward)
+            return std::forward<Self>(self).status().visit([&]<typename F>(F&& f) -> ResultH {
+                if constexpr (row_elem_normalized_v<M, std::remove_cvref_t<F>, HandledH>) {
+                    return ResultH(std::invoke(std::forward<H>(h), std::forward_like<Self>(f)));
+                } else {
+                    return ResultH(std::unexpect, StatusH(std::in_place_type<std::remove_cvref_t<F>>, std::forward_like<Self>(f)));
+                }
+            });
+
+        }
 
         private:
 
@@ -323,13 +436,21 @@ namespace detail {
 
         template <typename Other> /* unconstrained */
         [[nodiscard]] static constexpr ResultType widen(Other&& other)
-        // noexcept(std::is_nothrow_constructible_v<T, decltype(std::forward<Other>(other).value())>)
         noexcept(noexcept(ResultType(std::in_place, std::forward<Other>(other).value()))) {
+
+            static_assert(is_result_impl_v<Other>);
+            using ErrRow = result_row_t<std::remove_cvref_t<Other>>;
+
             if (other.has_value()) {
                 return ResultType(std::in_place, std::forward<Other>(other).value());
-            } else {
-                return ResultType(std::unexpect, StatusImpl<M, Es...>(std::forward<Other>(other).status())); /* noexcept */
             }
+
+            if constexpr (row_size_v<ErrRow> > 0) {
+                return ResultType(std::unexpect, StatusImpl<M, Es...>(std::forward<Other>(other).status())); /* noexcept */
+            } else {
+                std::unreachable();
+            }
+
         }
 
         ResultType result_;

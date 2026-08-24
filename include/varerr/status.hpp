@@ -447,9 +447,13 @@ namespace detail {
         return dispatch_linear_dense<N>(n, std::forward<F>(f));
     }
 
-    template <typename F, typename... Es>
+    // template <typename F, typename... Es>
+    // inline constexpr bool is_nothrow_visitable_v =
+    //     (std::is_nothrow_invocable_v<F, const Es&> && ...);
+
+    template <typename F, typename Self, typename... Es>
     inline constexpr bool is_nothrow_visitable_v =
-        (std::is_nothrow_invocable_v<F, const Es&> && ...);
+        (std::is_nothrow_invocable_v<F, decltype(std::forward_like<Self>(std::declval<Es&>()))> && ...);
 
     template <typename Self, typename T>
     using const_preserving_pointer_t = std::conditional_t<std::is_const_v<std::remove_reference_t<Self>>, const T*, T*>;
@@ -461,7 +465,8 @@ namespace detail {
         using TagType = std::size_t;
         using StorageType = Storage<Es...>;
 
-        // Ensure class invariants are satisfied.
+        // The following class invariants are required for the unconditional no-
+        // except specifications to be correct.
 
         static_assert(sizeof...(Es) > 0,
             "StatusImpl<R, Es...>: alternatives must be non-empty");
@@ -529,13 +534,24 @@ namespace detail {
 
         // Dispatch visitor to active member by index.
 
-        template <typename F>
-        constexpr decltype(auto) visit(F&& f) const
-        noexcept(is_nothrow_visitable_v<F, Es...>) {
+        // template <typename F>
+        // constexpr decltype(auto) visit(F&& f) const
+        // noexcept(is_nothrow_visitable_v<F, Es...>) {
+        //     return dispatch<sizeof...(Es)>(
+        //         this->active_,
+        //         [&]<std::size_t I>(std::integral_constant<std::size_t, I>) -> decltype(auto) {
+        //             return std::forward<F>(f)(storage_get<I>(this->alternatives_));
+        //         }
+        //     );
+        // }
+
+        template <typename Self, typename F>
+        constexpr decltype(auto) visit(this Self&& self, F&& f)
+        noexcept(is_nothrow_visitable_v<F, Self, Es...>) {
             return dispatch<sizeof...(Es)>(
-                this->active_,
+                self.active_,
                 [&]<std::size_t I>(std::integral_constant<std::size_t, I>) -> decltype(auto) {
-                    return std::forward<F>(f)(storage_get<I>(this->alternatives_));
+                    return std::forward<F>(f)(std::forward_like<Self>(storage_get<I>(self.alternatives_)));
                 }
             );
         }
@@ -782,7 +798,7 @@ namespace detail {
             } else if constexpr (Op == MergeOp::Intersection) {
                 add_merge_step = num_min_rank_frontier == num_rows;
             } else if constexpr (Op == MergeOp::Difference) {
-                add_merge_step = min_rank_row == 0 && num_min_rank_frontier > 0;
+                add_merge_step = min_rank_row == 0 && num_min_rank_frontier == 1;
             } else {
                 std::unreachable();
             }

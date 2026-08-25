@@ -16,6 +16,10 @@
 #include <type_traits>
 #include <utility>
 
+#ifndef __has_builtin
+#define __has_builtin(x) 0
+#endif
+
 namespace varerr {
 
 // The alternatives must be trivially copyable. Note that trivial copyability
@@ -649,7 +653,7 @@ namespace detail {
 
         #if defined(__cpp_pack_indexing) && __cpp_pack_indexing >= 202311L && __cplusplus > 202302L
         using type = Ts...[I];
-        #elif defined(__has_builtin) && __has_builtin(__type_pack_element)
+        #elif __has_builtin(__type_pack_element)
         using type = __type_pack_element<I, Ts...>;
         #else
         using type = std::tuple_element_t<I, std::tuple<Ts...>>;
@@ -677,17 +681,22 @@ namespace detail {
     requires IsRankedPack<R, Es...>
     struct pack_normalize {
 
-        static constexpr auto result = pack_normalize_indices_v<R, Es...>;
-        static constexpr auto count = result.first;
-        static constexpr auto indices = result.second;
-
         // pack_normalize<R, Es...>()::type is Row<Fs...> where Fs... is a sub-
         // set of Es... that is sorted and unique with respect to ranking func-
         // tion R::rank.
 
+        static constexpr auto result = pack_normalize_indices_v<R, Es...>;
+        static constexpr auto count = result.first;
+        static constexpr auto indices = result.second;
+
+        // Factor nested parameter pack expansion out of lambda return type to
+        // satisfy MSVC parser.
+
+        using row = Row<Es...>;
+
         using type = decltype(
             []<std::size_t... Is>(std::index_sequence<Is...>) {
-                return []<std::size_t... Js>() -> Row<pack_subscript_t<Js, Es...>...> {
+                return []<std::size_t... Js>() -> Row<row_subscript_t<Js, row>...> {
                     return {};
                 }.template operator()<indices[Is]...>();
             }(std::make_index_sequence<count> {})
@@ -836,9 +845,14 @@ namespace detail {
         static constexpr auto merge_size = merge_plan.size;
         static constexpr auto merge_steps = merge_plan.steps;
 
+        // Factor nested parameter pack expansion out of lambda return type to
+        // satisfy MSVC parser.
+
+        using rows = Row<Rows...>;
+
         using type = decltype(
             []<std::size_t... Is>(std::index_sequence<Is...>) {
-                return []<MergeStep... Ms>() ->Row<row_subscript_t<Ms.index, pack_subscript_t<Ms.source, Rows...>>...> {
+                return []<MergeStep... Ms>() ->Row<row_subscript_t<Ms.index, row_subscript_t<Ms.source, rows>>...> {
                     return {};
                 }.template operator()<merge_steps[Is]...>();
             }(std::make_index_sequence<merge_size> {})

@@ -29,3 +29,5 @@ The presets select the `Debug` build type and enable the following options:
 - Consider throwing when `rank_v<R, E> == rank_v<R, F>` but `!std::same_as<E, F>` when normalizing rows.
 - Hide everything in `status.hpp` except `IsRankedPack` (`IsErrorRow`) and `IsTriviallyStorable`.
 - Consider providing a static factory method to in-place construct the error branch of ResultImpl.
+- Missing uniqueness/de-duplication coverage for `row_normalize_t`.
+- Simplify some compile-time functions with `constexpr_for` (`test_algebra.cpp`).

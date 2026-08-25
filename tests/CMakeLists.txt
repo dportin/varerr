@@ -3,7 +3,8 @@ include(Catch)
 # Generate Catch2 targets.
 
 add_executable(${PROJECT_NAME}_tests_main
-    "tests.cpp"
+    "test_main.cpp"
+    "test_algebra.cpp"
 )
 
 target_link_libraries(${PROJECT_NAME}_tests_main PRIVATE

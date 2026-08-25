@@ -852,7 +852,7 @@ template <typename M, typename... Rows>
 using row_intersection_normalized_t = detail::merge_normalized_rows_linear<MergeOp::Intersection, M, Rows...>::type;
 
 template <typename M, typename... Rows>
-using row_difference_t = detail::merge_normalized_rows_linear<MergeOp::Difference, M, Rows...>::type;
+using row_difference_normalized_t = detail::merge_normalized_rows_linear<MergeOp::Difference, M, Rows...>::type;
 
 namespace detail {
 

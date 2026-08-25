@@ -1,0 +1,25 @@
+---
+If:
+  PathMatch: [include/.*]
+
+---
+If:
+  PathMatch: [tests/.*]
+
+CompileFlags:
+  Remove:
+    - -Werror
+    - -Wshadow-all
+    - -Wshadow
+    - -Wundef
+
+Diagnostics:
+  ClangTidy:
+    Remove:
+      - readability-magic-numbers
+      - cppcoreguidelines-avoid-magic-numbers
+      - cppcoreguidelines-use-default-member-init
+      - modernize-use-default-member-init
+
+Index:
+  Background: Skip

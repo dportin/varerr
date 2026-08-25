@@ -364,7 +364,7 @@ namespace detail {
                 "handle: handled alternatives must be ranked");
 
             using HandledH = row_normalize_t<M, Row<Fs...>>;
-            using RetainedH = row_difference_t<M, Row<Es...>, HandledH>;
+            using RetainedH = row_difference_normalized_t<M, Row<Es...>, HandledH>;
 
             // Validate the error handler.
 

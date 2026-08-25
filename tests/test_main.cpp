@@ -1,102 +1,105 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include "include/lifetime.hpp"
+#include "include/universe.hpp"
 
 #include <varerr/status.hpp>
 #include <varerr/result.hpp>
 
-#include <cstddef>
 
 #include <algorithm>
 #include <concepts>
+#include <cstddef>
+#include <functional>
 #include <type_traits>
 #include <utility>
-#include <functional>
 
-// Triviality
+using namespace varerr::tests::lifetime;
+using namespace varerr::tests::universe;
 
 namespace {
 
-    template <typename... Ts>
-    using Storage = varerr::detail::Storage<Ts...>;
+using S0 = varerr::detail::Storage<>;
+using S1 = varerr::detail::Storage<E<0>>;
+using S2 = varerr::detail::Storage<E<0>, E<1>>;
 
-    using S0 = Storage<>;
-    using S1 = Storage<short>;
-    using S2 = Storage<short, int>;
+template <typename S>
+constexpr void varset_storage_trivial_test() {
 
-    template <typename S>
-    constexpr void varset_storage_trivial_test() {
+    // The alternatives must be trivially copyable and destructible.
 
-        // Trivial copyability and destructibility are required.
+    STATIC_REQUIRE(std::is_trivially_copyable_v<S>);
+    STATIC_REQUIRE(std::is_trivially_destructible_v<S>);
 
-        STATIC_REQUIRE(std::is_trivially_copyable_v<S>);
-        STATIC_REQUIRE(std::is_trivially_destructible_v<S>);
+    STATIC_REQUIRE(std::is_trivially_copy_constructible_v<S>);
+    STATIC_REQUIRE(std::is_trivially_move_constructible_v<S>);
+    STATIC_REQUIRE(std::is_trivially_copy_assignable_v<S>);
+    STATIC_REQUIRE(std::is_trivially_move_assignable_v<S>);
 
-        STATIC_REQUIRE(std::is_trivially_copy_constructible_v<S>);
-        STATIC_REQUIRE(std::is_trivially_move_constructible_v<S>);
-        STATIC_REQUIRE(std::is_trivially_copy_assignable_v<S>);
-        STATIC_REQUIRE(std::is_trivially_move_assignable_v<S>);
+    // The default constructor is non-trivial by construction.
 
-        // The default constructor is non-trivial by construction.
-
-        STATIC_REQUIRE_FALSE(std::is_trivially_default_constructible_v<S>);
-
-    }
+    STATIC_REQUIRE_FALSE(std::is_trivially_default_constructible_v<S>);
 
 }
 
-TEST_CASE("varset_storage_trivial", "[varset][storage][trivial]") {
+} // namespace
+
+TEST_CASE("varset_storage_trivial", "[varset][storage]") {
+
     varset_storage_trivial_test<S0>();
     varset_storage_trivial_test<S1>();
     varset_storage_trivial_test<S2>();
-}
 
-// Storage and layout
+}
 
 namespace {
 
-    template <typename... Ts>
-    constexpr std::size_t max_sizeof_v = std::max({sizeof(Ts)...});
+template <typename... Es>
+constexpr std::size_t max_sizeof_v = std::max({sizeof(Es)...});
 
-    template <typename... Ts>
-    constexpr std::size_t max_alignof_v = std::max({alignof(Ts)...});
+template <typename... Es>
+constexpr std::size_t max_alignof_v = std::max({alignof(Es)...});
 
-    template <typename... Ts>
-    constexpr std::size_t max_sizeof_v<Storage<Ts...>> = max_sizeof_v<Ts...>;
+template <typename... Es>
+constexpr std::size_t max_sizeof_v<varerr::detail::Storage<Es...>> = max_sizeof_v<Es...>;
 
-    template <typename... Ts>
-    constexpr std::size_t max_alignof_v<Storage<Ts...>> = max_alignof_v<Ts...>;
+template <typename... Es>
+constexpr std::size_t max_alignof_v<varerr::detail::Storage<Es...>> = max_alignof_v<Es...>;
 
-    template <typename S>
-    constexpr void varset_storage_memory_test() {
-        STATIC_REQUIRE(sizeof(S) == max_sizeof_v<S>);
-        STATIC_REQUIRE(alignof(S) == max_alignof_v<S>);
-    }
+template <typename S>
+constexpr void varset_storage_memory_test() {
+
+    STATIC_REQUIRE(sizeof(S) == max_sizeof_v<S>);
+    STATIC_REQUIRE(alignof(S) == max_alignof_v<S>);
 
 }
 
-TEST_CASE("varset_storage_memory", "[varset][storage][memory]") {
+} // namespace
+
+TEST_CASE("varset_storage_memory", "[varset][storage]") {
 
     varset_storage_memory_test<S1>();
     varset_storage_memory_test<S2>();
 
-    // The standard does not especify an exact value for the empty case.
+    // The standard does not specify an exact value for the empty case.
 
-    STATIC_REQUIRE(sizeof(Storage<>) > 0); // NOLINT
-    STATIC_REQUIRE(sizeof(Storage<>) > 0); // NOLINT
+    STATIC_REQUIRE(sizeof(S0) > 0);
+    STATIC_REQUIRE(alignof(S0) > 0);
 
 }
 
 namespace {
 
-    template <typename S>
-    constexpr void varset_storage_memory_layout_test() {
-        STATIC_REQUIRE(std::is_standard_layout_v<Storage<S>>);
-    }
+template <typename S>
+constexpr void varset_storage_memory_layout_test() {
+
+    STATIC_REQUIRE(std::is_standard_layout_v<S>);
 
 }
 
-TEST_CASE("varset_storage_memory_layout", "[varset][storage][memory]") {
+} // namespace
+
+TEST_CASE("varset_storage_layout", "[varset][storage]") {
 
     varset_storage_memory_layout_test<S0>();
     varset_storage_memory_layout_test<S1>();
@@ -109,8 +112,6 @@ TEST_CASE("varset_storage_memory_layout", "[varset][storage][memory]") {
 }
 
 namespace {
-
-    // NOLINTBEGIN
 
     struct TrivialStoreType {
         int store_;
@@ -136,18 +137,16 @@ namespace {
         NonTrivialMoveType(NonTrivialMoveType&&) {}
     };
 
-    // NOLINTEND
+} // namespace
 
-}
-
-TEST_CASE("varset_storage_trivial_store", "[varset][storage][trivial]") {
+TEST_CASE("varset_storage_trivial_store", "[varset][storage]") {
 
     STATIC_REQUIRE(varerr::IsTriviallyStorable<int>);
     STATIC_REQUIRE(varerr::IsTriviallyStorable<TrivialStoreType>);
     STATIC_REQUIRE(varerr::IsTriviallyStorable<S2>);
     STATIC_REQUIRE(varerr::IsTriviallyStorable<NonTrivialConstructType>);
-    STATIC_REQUIRE(varerr::IsTriviallyStorable<Storage<TrivialStoreType>>);
-    STATIC_REQUIRE(varerr::IsTriviallyStorable<Storage<NonTrivialConstructType>>);
+    STATIC_REQUIRE(varerr::IsTriviallyStorable<varerr::detail::Storage<TrivialStoreType>>);
+    STATIC_REQUIRE(varerr::IsTriviallyStorable<varerr::detail::Storage<NonTrivialConstructType>>);
 
     STATIC_REQUIRE_FALSE(varerr::IsTriviallyStorable<const int>);
     STATIC_REQUIRE_FALSE(varerr::IsTriviallyStorable<int&>);
@@ -160,76 +159,38 @@ TEST_CASE("varset_storage_trivial_store", "[varset][storage][trivial]") {
 
 }
 
-TEST_CASE("varset_storage_functional", "[varset][storage][functional]") {
+TEST_CASE("varset_storage_construct", "[varset][storage]") {
 
     SECTION("replace_head") {
 
         STATIC_REQUIRE([]{
-            S2 storage(std::in_place_index<0>, static_cast<short>(100));
+            S2 storage(std::in_place_index<0>, std::size_t {100});
             return storage.head_;
-        }() == 100);
+        }().value() == 100);
 
         STATIC_REQUIRE([]{
-            S2 storage(std::in_place_index<1>, 100);
-            std::construct_at(std::addressof(storage.head_), static_cast<short>(101));
+            S2 storage(std::in_place_index<1>, std::size_t {100});
+            std::construct_at(std::addressof(storage.head_), std::size_t {101});
             return storage.head_;
-        }() == 101);
+        }().value() == 101);
 
     }
 
     SECTION("replace_tail") {
 
         STATIC_REQUIRE([]{
-            S2 storage(std::in_place_index<1>, 100);
-            return storage.tail_.head_; // NOLINT
-        }() == 100);
+            S2 storage(std::in_place_index<1>, std::size_t {100});
+            return storage.tail_.head_;
+        }().value() == 100);
 
         STATIC_REQUIRE([]{
-            S2 storage(std::in_place_index<0>, static_cast<short>(100));
+            S2 storage(std::in_place_index<0>, std::size_t {100});
             std::construct_at(std::addressof(storage.tail_));
-            std::construct_at(std::addressof(storage.tail_.head_), 101); // NOLINT
-            return storage.tail_.head_; // NOLINT
-        }() == 101);
+            std::construct_at(std::addressof(storage.tail_.head_), std::size_t {101});
+            return storage.tail_.head_;
+        }().value() == 101);
 
     }
-
-}
-
-namespace {
-
-    template <std::size_t N>
-    struct E {
-
-        std::size_t value_;
-
-        constexpr E(std::size_t n) noexcept :
-            value_(n) {}
-
-        template <std::size_t>
-        friend struct E;
-
-    };
-
-    template <std::size_t N, std::size_t M>
-    constexpr bool operator==(const E<N>& lhs, const E<M>& rhs) noexcept {
-        return lhs.value_ == rhs.value_;
-    }
-
-    struct Universe {
-
-        template <typename T>
-        struct rank_trait;
-
-        template <std::size_t N>
-        struct rank_trait<E<N>> {
-            static constexpr std::size_t rank_ = N;
-        };
-
-        template <typename T>
-        requires requires { rank_trait<T>::rank_; }
-        static constexpr std::size_t rank = rank_trait<T>::rank_;
-
-    };
 
 }
 
@@ -357,7 +318,7 @@ TEST_CASE("result_error_functional_deduction", "[result][error][functional]") {
     auto infer1 = varerr::Error(E<0> { 1 });
     STATIC_REQUIRE(std::same_as<varerr::Error<E<0>>, decltype(infer1)>);
 
-    auto emplace0 = varerr::Error<E<0>> { std::size_t { 42 } }; // NOLINT
+    auto emplace0 = varerr::Error<E<0>> { E<0> { 42 } };
     STATIC_REQUIRE(std::same_as<varerr::Error<E<0>>, decltype(emplace0)>);
     REQUIRE(emplace0.unwrap().value_ == 42);
 
@@ -398,7 +359,7 @@ TEST_CASE("result_functional_access", "[result][functional]") {
     REQUIRE(!res1.holds_error<E<1>>());
     REQUIRE(!res1.holds_error<E<99>>());
 
-    auto err0 = R2<int>(varerr::Error<E<1>>(42)); // NOLINT
+    auto err0 = R2<int>(varerr::Error<E<1>>{ E<1> {42} }); // NOLINT
     REQUIRE(!err0.has_value());
     REQUIRE(err0.has_error());
     REQUIRE(err0.holds_error<E<1>>());
@@ -435,13 +396,13 @@ TEST_CASE("result_functional_transform", "[result][functional]") {
 
     // transform dispatches to correct constructor when value in error row
     R3<unsigned int> res6 = R3<unsigned int>(42); // NOLINT
-    R3<E<0>> res7 = res6.transform([](unsigned int n) -> E<0> { return n; });
+    R3<E<0>> res7 = res6.transform([](unsigned int n) -> E<0> { return E<0>(static_cast<std::size_t>(n)); });
     REQUIRE(res7.has_value());
     REQUIRE(!res7.has_error());
     REQUIRE(res7.value().value_ == 42);
 
     // result holds an error
-    R3<unsigned int> err0 = R3<unsigned int>(varerr::Error<E<1>>(42)); // NOLINT
+    R3<unsigned int> err0 = R3<unsigned int>(varerr::Error<E<1>>(E<1>(42))); // NOLINT
     R3<unsigned int> err1 = err0.transform([](unsigned int n) -> unsigned int { return n + 1; });
     REQUIRE(err1.has_error());
     REQUIRE(!err1.has_value());
@@ -449,7 +410,7 @@ TEST_CASE("result_functional_transform", "[result][functional]") {
     REQUIRE(err1.error<E<1>>().value_ == 42);
 
     // conversion when result holds an error
-    R3<E<1>> err2 = err0.transform([](unsigned int n) -> E<1> { return n; });
+    R3<E<1>> err2 = err0.transform([](unsigned int n) -> E<1> { return E<1>(static_cast<std::size_t>(n)); });
     REQUIRE(err2.has_error());
     REQUIRE(!err2.has_value());
     REQUIRE(err2.holds_error<E<1>>());
@@ -459,8 +420,8 @@ TEST_CASE("result_functional_transform", "[result][functional]") {
 
 TEST_CASE("result_functional_transform_lifetime", "[result][functional]") {
 
-    lifetime::Counts global {};
-    using TrackedR = lifetime::Tracked<int>;
+    Record global {};
+    using TrackedR = Tracked<int>;
     using TrackingR = varerr::Result<Universe, TrackedR, E<0>, E<1>, E<2>>;
 
     TrackingR tracked0 = TrackingR(TrackedR(&global, 5)); // NOLINT
@@ -537,7 +498,7 @@ TEST_CASE("result_functional_handle", "[result][functional]") {
     using R0 = varerr::Result<Universe, std::size_t>;
     using R1 = varerr::Result<Universe, std::size_t, E<0>>;
 
-    R1 result0 = R1(varerr::Error<E<0>>(42));
+    R1 result0 = R1(varerr::Error<E<0>>(E<0>(42)));
 
     REQUIRE(result0.holds_error<E<0>>());
     REQUIRE(result0.error<E<0>>().value_ == 42);

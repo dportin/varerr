@@ -87,15 +87,17 @@ using mask_to_row_t = mask_to_row<Mask, std::make_index_sequence<std::bit_width(
 template <std::size_t Code, std::size_t Mask>
 [[nodiscard]] consteval auto lehmer_code_to_row_impl() {
 
+    constexpr std::size_t mask_bits = static_cast<std::size_t>(std::popcount(Mask));
+
     // [code] is the current Lehmer code; [size] the size of the current permut-
     // ation (one more than the current factorial base); and [mask] the bitmask
     // of remaining elements in the universe.
 
     std::size_t code = Code;
-    std::size_t size = std::popcount(Mask);
+    std::size_t size = mask_bits;
     std::size_t mask = Mask;
 
-    std::array<std::size_t, std::popcount(Mask)> indices {};
+    std::array<std::size_t, mask_bits> indices {};
 
     while (size--) {
 

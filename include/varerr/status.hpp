@@ -640,22 +640,25 @@ namespace detail {
 
     }
 
-    // Index into a template parameter pack. Falls back to std::tuple_element_t
-    // if the compiler does not have a pack indexing builtin (MSVC, AppleClang).
+    // Index into a parameter pack. Falls back to std::tuple_element_t if the
+    // compiler does not support pack indexing at the specified language stan-
+    // dard revision or have a pack indexing builtin (MSVC, AppleClang).
 
-    // TODO: disable -Wc++26-extensions
-
-    // #if defined(__cpp_pack_indexing) && __cpp_pack_indexing >= 202311L
-    // template <std::size_t I, typename... Ts>
-    // using type = Ts...[I];
-
-    #if defined(__has_builtin) && __has_builtin(__type_pack_element)
     template <std::size_t I, typename... Ts>
-    using pack_subscript_t = __type_pack_element<I, Ts...>;
-    #else
+    struct pack_subscript {
+
+        #if defined(__cpp_pack_indexing) && __cpp_pack_indexing >= 202311L && __cplusplus > 202302L
+        using type = Ts...[I];
+        #elif defined(__has_builtin) && __has_builtin(__type_pack_element)
+        using type = __type_pack_element<I, Ts...>;
+        #else
+        using type = std::tuple_element_t<I, std::tuple<Ts...>>;
+        #endif
+
+    };
+
     template <std::size_t I, typename... Ts>
-    using pack_subscript_t = std::tuple_element_t<I, std::tuple<Ts...>>;
-    #endif
+    using pack_subscript_t = pack_subscript<I, Ts...>::type;
 
     template <std::size_t I, typename U>
     struct row_subscript;

@@ -36,6 +36,12 @@ if(PROJECT_IS_TOP_LEVEL)
     set(FETCHCONTENT_BASE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/.cache/deps" CACHE PATH "FetchContent dependency cache")
 endif()
 
+# Disable module dependency scanning.
+
+if(PROJECT_IS_TOP_LEVEL)
+    set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
+endif()
+
 # Generate header isolation tests.
 
 if(${PROJECT_NAME}_TESTING)

@@ -1,4 +1,4 @@
-#include <varerr/status.hpp>
+#include <varerr/storage.hpp>
 #include <varerr/result.hpp>
 
 #include <cstddef>
@@ -18,8 +18,8 @@ int main(void) {
 
     // Instantiate varerr::detail::Status
 
-    const auto status0 = varerr::detail::Status<Universe, E<0>> { std::in_place_type<E<0>>, std::size_t {42} };
-    const auto status1 = varerr::detail::Status<Universe, E<0>, E<1>> { std::in_place_type<E<1>>, std::size_t {42} };
+    const auto status0 = varerr::Status<Universe, E<0>> { std::in_place_type<E<0>>, std::size_t {42} };
+    const auto status1 = varerr::Status<Universe, E<0>, E<1>> { std::in_place_type<E<1>>, std::size_t {42} };
     const bool check_status = status0.get_if<E<0>>()->value() == status1.get_if<E<1>>()->value();;
 
     // Instantiate varerr::Error

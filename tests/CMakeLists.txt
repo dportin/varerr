@@ -1,5 +1,6 @@
 include(Catch)
 
+
 # Generate Catch2 targets.
 
 add_executable(${PROJECT_NAME}_tests_main
@@ -15,8 +16,7 @@ target_link_libraries(${PROJECT_NAME}_tests_main PRIVATE
 
 catch_discover_tests(${PROJECT_NAME}_tests_main)
 
-# The headers must be instantiated in some object file to generate a compilation
-# database for Clang-Tidy to consume.
+# Instantiate headers in object file to generate compilation database.
 
 add_library(${PROJECT_NAME}_tests_instantiate_build OBJECT
     "instantiate/instantiate.cpp"
@@ -45,7 +45,7 @@ set_tests_properties(${PROJECT_NAME}_tests_instantiate PROPERTIES
 
 # Generate Clang-Tidy test targets and integrate Clang-Tidy with CTest.
 
-if(${PROJECT_NAME}_DEVELOPMENT)
+if(${PROJECT_NAME}_TESTING AND ${PROJECT_NAME}_TESTING_CLANG_TIDY)
 
     find_program(${PROJECT_NAME}_CLANG_TIDY_BINARY
         NAMES "clang-tidy" REQUIRED
@@ -82,5 +82,87 @@ if(${PROJECT_NAME}_DEVELOPMENT)
     set_tests_properties(${PROJECT_NAME}_tests_clang_tidy PROPERTIES
         FIXTURES_REQUIRED ${PROJECT_NAME}_tests_fixture_instantiate
     )
+
+endif()
+
+# Generate IWYU test targets and integrate IWYU with CTest.
+
+if(${PROJECT_NAME}_TESTING AND ${PROJECT_NAME}_TESTING_IWYU)
+
+    find_program(${PROJECT_NAME}_IWYU_BINARY
+        NAMES "include-what-you-use" "iwyu" REQUIRED
+    )
+
+    get_target_property(${PROJECT_NAME}_IWYU_HEADERS
+        ${PROJECT_NAME}_header_only HEADER_SET
+    )
+
+    get_target_property(${PROJECT_NAME}_IWYU_HEADER_DIRS
+        ${PROJECT_NAME}_header_only HEADER_DIRS
+    )
+
+    set(${PROJECT_NAME}_IWYU_INCLUDE_DIRS "")
+    foreach(_IWYU_HEADER_DIR IN LISTS ${PROJECT_NAME}_IWYU_HEADER_DIRS)
+        list(APPEND ${PROJECT_NAME}_IWYU_INCLUDE_DIRS "-I${_IWYU_HEADER_DIR}")
+    endforeach()
+
+    add_custom_target(${PROJECT_NAME}_tests_iwyu)
+
+    foreach(_IWYU_HEADER IN LISTS ${PROJECT_NAME}_IWYU_HEADERS)
+
+        unset(_IWYU_HEADER_RELATIVE)
+        foreach(_IWYU_HEADER_DIR IN LISTS ${PROJECT_NAME}_IWYU_HEADER_DIRS)
+            cmake_path(IS_PREFIX _IWYU_HEADER_DIR "${_IWYU_HEADER}" NORMALIZE _IWYU_HEADER_IS_RELATIVE)
+            if(_IWYU_HEADER_IS_RELATIVE)
+                cmake_path(RELATIVE_PATH _IWYU_HEADER
+                    BASE_DIRECTORY "${_IWYU_HEADER_DIR}"
+                    OUTPUT_VARIABLE _IWYU_HEADER_RELATIVE
+                )
+                break()
+            endif()
+        endforeach()
+
+        if(NOT DEFINED _IWYU_HEADER_RELATIVE)
+            message(FATAL_ERROR "${PROJECT_NAME}: header outside header base directories: ${_IWYU_HEADER}")
+        endif()
+
+        # Generate one translation unit per header.
+
+        cmake_path(REMOVE_EXTENSION _IWYU_HEADER_RELATIVE OUTPUT_VARIABLE _IWYU_HEADER_RELATIVE_STEM)
+        set(_IWYU_HEADER_RELATIVE_SOURCE "${CMAKE_CURRENT_BINARY_DIR}/iwyu/${_IWYU_HEADER_RELATIVE_STEM}.cpp")
+
+        file(CONFIGURE
+            OUTPUT "${_IWYU_HEADER_RELATIVE_SOURCE}"
+            CONTENT "#include <@_IWYU_HEADER_RELATIVE@> // IWYU pragma: keep\n"
+            @ONLY
+        )
+
+        # Add "-Xiwyu --verbose=7" to debug IWYU errors.
+
+        set(_IWYU_HEADER_TEST_COMMAND
+            "${${PROJECT_NAME}_IWYU_BINARY}"
+            -std=c++23
+            ${${PROJECT_NAME}_IWYU_INCLUDE_DIRS}
+            -Xiwyu --error
+            -Xiwyu "--check_also=${_IWYU_HEADER}"
+            "${_IWYU_HEADER_RELATIVE_SOURCE}"
+        )
+
+        string(REPLACE "/" "_" _IWYU_HEADER_RELATIVE_SUFFIX "${_IWYU_HEADER_RELATIVE_STEM}")
+
+        add_test(NAME "${PROJECT_NAME}_tests_iwyu_${_IWYU_HEADER_RELATIVE_SUFFIX}"
+            COMMAND ${_IWYU_HEADER_TEST_COMMAND}
+        )
+
+        add_custom_target(${PROJECT_NAME}_tests_iwyu_${_IWYU_HEADER_RELATIVE_SUFFIX}
+            COMMAND ${_IWYU_HEADER_TEST_COMMAND}
+            VERBATIM
+        )
+
+        add_dependencies(${PROJECT_NAME}_tests_iwyu
+            ${PROJECT_NAME}_tests_iwyu_${_IWYU_HEADER_RELATIVE_SUFFIX}
+        )
+
+    endforeach()
 
 endif()

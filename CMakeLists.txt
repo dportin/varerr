@@ -1,5 +1,7 @@
 cmake_minimum_required(VERSION 4.3 FATAL_ERROR)
 
+include(CMakeDependentOption)
+
 project(varerr
     VERSION 0.0.1.0
     DESCRIPTION "Experimental error-handling library"
@@ -25,6 +27,20 @@ option(${PROJECT_NAME}_TESTING "Generate test targets" "${PROJECT_IS_TOP_LEVEL}"
 # Enable strict build policy in development mode.
 
 option(${PROJECT_NAME}_DEVELOPMENT "Enable strict build policies" "${PROJECT_IS_TOP_LEVEL}")
+
+# Enable Clang-Tidy test targets.
+
+cmake_dependent_option(
+    ${PROJECT_NAME}_TESTING_CLANG_TIDY "Generate Clang-Tidy test targets" OFF
+    "${PROJECT_NAME}_TESTING" OFF
+)
+
+# Enable IWYU test targets.
+
+cmake_dependent_option(
+    ${PROJECT_NAME}_TESTING_IWYU "Generate IWYU test targets" OFF
+    "${PROJECT_NAME}_TESTING" OFF
+)
 
 # Generate compilation database.
 
@@ -152,6 +168,8 @@ target_sources(${PROJECT_NAME}_header_only
         BASE_DIRS
             "${CMAKE_CURRENT_SOURCE_DIR}/include"
         FILES
+            "${CMAKE_CURRENT_SOURCE_DIR}/include/${PROJECT_NAME}/storage.hpp"
+            "${CMAKE_CURRENT_SOURCE_DIR}/include/${PROJECT_NAME}/algebra.hpp"
             "${CMAKE_CURRENT_SOURCE_DIR}/include/${PROJECT_NAME}/status.hpp"
             "${CMAKE_CURRENT_SOURCE_DIR}/include/${PROJECT_NAME}/result.hpp"
 )

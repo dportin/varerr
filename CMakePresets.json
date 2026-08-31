@@ -28,6 +28,23 @@
         },
 
         {
+            "name": "tools-clang-tidy-mixin",
+            "hidden": true,
+            "cacheVariables": {
+                "varerr_TESTING": "ON",
+                "varerr_TESTING_CLANG_TIDY": "ON"
+            }
+        },
+        {
+            "name": "tools-iwyu-mixin",
+            "hidden": true,
+            "cacheVariables": {
+                "varerr_TESTING": "ON",
+                "varerr_TESTING_IWYU": "ON"
+            }
+        },
+
+        {
             "name": "windows-base",
             "hidden": true,
             "condition": {
@@ -151,6 +168,57 @@
             "cacheVariables": {
                 "CMAKE_CXX_COMPILER": "clang++"
             }
+        },
+
+        {
+            "name": "windows-ninja-msvc-amd64-dev-tools",
+            "displayName": "windows-ninja-msvc-amd64-dev-tools",
+            "inherits": [
+                "windows-ninja-msvc-amd64-dev",
+                "tools-clang-tidy-mixin"
+            ]
+        },
+        {
+            "name": "windows-ninja-clangcl-amd64-dev-tools",
+            "displayName": "windows-ninja-clangcl-amd64-dev-tools",
+            "inherits": [
+                "windows-ninja-clangcl-amd64-dev",
+                "tools-clang-tidy-mixin"
+            ]
+        },
+        {
+            "name": "linux-make-gcc-amd64-dev-tools",
+            "displayName": "linux-make-gcc-amd64-dev-tools",
+            "inherits": [
+                "linux-make-gcc-amd64-dev",
+                "tools-clang-tidy-mixin"
+            ]
+        },
+        {
+            "name": "linux-make-clang-amd64-dev-tools",
+            "displayName": "linux-make-clang-amd64-dev-tools",
+            "inherits": [
+                "linux-make-clang-amd64-dev",
+                "tools-clang-tidy-mixin",
+                "tools-iwyu-mixin"
+            ]
+        },
+        {
+            "name": "linux-ninja-gcc-amd64-dev-tools",
+            "displayName": "linux-ninja-gcc-amd64-dev-tools",
+            "inherits": [
+                "linux-ninja-gcc-amd64-dev",
+                "tools-clang-tidy-mixin"
+            ]
+        },
+        {
+            "name": "linux-ninja-clang-amd64-dev-tools",
+            "displayName": "linux-ninja-clang-amd64-dev-tools",
+            "inherits": [
+                "linux-ninja-clang-amd64-dev",
+                "tools-clang-tidy-mixin",
+                "tools-iwyu-mixin"
+            ]
         }
 
     ],
@@ -213,6 +281,55 @@
             "name": "linux-ninja-clang-amd64-dev",
             "displayName": "linux-ninja-clang-amd64-dev",
             "configurePreset": "linux-ninja-clang-amd64-dev",
+            "inherits": [
+                "build-base"
+            ]
+        },
+
+        {
+            "name": "windows-ninja-msvc-amd64-dev-tools",
+            "displayName": "windows-ninja-msvc-amd64-dev-tools",
+            "configurePreset": "windows-ninja-msvc-amd64-dev-tools",
+            "inherits": [
+                "build-base"
+            ]
+        },
+        {
+            "name": "windows-ninja-clangcl-amd64-dev-tools",
+            "displayName": "windows-ninja-clangcl-amd64-dev-tools",
+            "configurePreset": "windows-ninja-clangcl-amd64-dev-tools",
+            "inherits": [
+                "build-base"
+            ]
+        },
+        {
+            "name": "linux-make-gcc-amd64-dev-tools",
+            "displayName": "linux-make-gcc-amd64-dev-tools",
+            "configurePreset": "linux-make-gcc-amd64-dev-tools",
+            "inherits": [
+                "build-base"
+            ]
+        },
+        {
+            "name": "linux-make-clang-amd64-dev-tools",
+            "displayName": "linux-make-clang-amd64-dev-tools",
+            "configurePreset": "linux-make-clang-amd64-dev-tools",
+            "inherits": [
+                "build-base"
+            ]
+        },
+        {
+            "name": "linux-ninja-gcc-amd64-dev-tools",
+            "displayName": "linux-ninja-gcc-amd64-dev-tools",
+            "configurePreset": "linux-ninja-gcc-amd64-dev-tools",
+            "inherits": [
+                "build-base"
+            ]
+        },
+        {
+            "name": "linux-ninja-clang-amd64-dev-tools",
+            "displayName": "linux-ninja-clang-amd64-dev-tools",
+            "configurePreset": "linux-ninja-clang-amd64-dev-tools",
             "inherits": [
                 "build-base"
             ]
@@ -279,6 +396,55 @@
             "name": "linux-ninja-clang-amd64-dev",
             "displayName": "linux-ninja-clang-amd64-dev",
             "configurePreset": "linux-ninja-clang-amd64-dev",
+            "inherits": [
+                "test-base"
+            ]
+        },
+
+        {
+            "name": "windows-ninja-msvc-amd64-dev-tools",
+            "displayName": "windows-ninja-msvc-amd64-dev-tools",
+            "configurePreset": "windows-ninja-msvc-amd64-dev-tools",
+            "inherits": [
+                "test-base"
+            ]
+        },
+        {
+            "name": "windows-ninja-clangcl-amd64-dev-tools",
+            "displayName": "windows-ninja-clangcl-amd64-dev-tools",
+            "configurePreset": "windows-ninja-clangcl-amd64-dev-tools",
+            "inherits": [
+                "test-base"
+            ]
+        },
+        {
+            "name": "linux-make-gcc-amd64-dev-tools",
+            "displayName": "linux-make-gcc-amd64-dev-tools",
+            "configurePreset": "linux-make-gcc-amd64-dev-tools",
+            "inherits": [
+                "test-base"
+            ]
+        },
+        {
+            "name": "linux-make-clang-amd64-dev-tools",
+            "displayName": "linux-make-clang-amd64-dev-tools",
+            "configurePreset": "linux-make-clang-amd64-dev-tools",
+            "inherits": [
+                "test-base"
+            ]
+        },
+        {
+            "name": "linux-ninja-gcc-amd64-dev-tools",
+            "displayName": "linux-ninja-gcc-amd64-dev-tools",
+            "configurePreset": "linux-ninja-gcc-amd64-dev-tools",
+            "inherits": [
+                "test-base"
+            ]
+        },
+        {
+            "name": "linux-ninja-clang-amd64-dev-tools",
+            "displayName": "linux-ninja-clang-amd64-dev-tools",
+            "configurePreset": "linux-ninja-clang-amd64-dev-tools",
             "inherits": [
                 "test-base"
             ]

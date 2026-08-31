@@ -122,6 +122,7 @@ namespace {
         NonTrivialConstructType(int) {}
     };
 
+
     struct NonTrivialDestructType {
         int store_;
         ~NonTrivialDestructType() {}
@@ -134,7 +135,7 @@ namespace {
 
     struct NonTrivialMoveType {
         int store_;
-        NonTrivialMoveType(NonTrivialMoveType&&) {}
+        NonTrivialMoveType(NonTrivialMoveType&&) noexcept {}
     };
 
 } // namespace
@@ -196,12 +197,12 @@ TEST_CASE("varset_storage_construct", "[varset][storage]") {
 
 TEST_CASE("varset_ranked", "[varset][row][ranked]") {
 
-    STATIC_REQUIRE(varerr::detail::IsRankedPack<Universe>);
-    STATIC_REQUIRE(varerr::detail::IsRankedPack<Universe, E<0>>);
-    STATIC_REQUIRE(varerr::detail::IsRankedPack<Universe, E<1>, E<0>>);
+    STATIC_REQUIRE(varerr::IsRankedPack<Universe>);
+    STATIC_REQUIRE(varerr::IsRankedPack<Universe, E<0>>);
+    STATIC_REQUIRE(varerr::IsRankedPack<Universe, E<1>, E<0>>);
 
-    STATIC_REQUIRE_FALSE(varerr::detail::IsRankedPack<Universe, int>);
-    STATIC_REQUIRE_FALSE(varerr::detail::IsRankedPack<Universe, E<1>, int>);
+    STATIC_REQUIRE_FALSE(varerr::IsRankedPack<Universe, int>);
+    STATIC_REQUIRE_FALSE(varerr::IsRankedPack<Universe, E<1>, int>);
 
     STATIC_REQUIRE(varerr::IsRankedRow<Universe, varerr::Row<>>);
     STATIC_REQUIRE(varerr::IsRankedRow<Universe, varerr::Row<E<0>>>);
@@ -214,14 +215,14 @@ TEST_CASE("varset_ranked", "[varset][row][ranked]") {
 
 TEST_CASE("varset_normalized", "[varset][row][normalized]") {
 
-    STATIC_REQUIRE(varerr::detail::IsNormalizedPack<Universe>);
-    STATIC_REQUIRE(varerr::detail::IsNormalizedPack<Universe, E<0>>);
-    STATIC_REQUIRE(varerr::detail::IsNormalizedPack<Universe, E<0>, E<1>>);
-    STATIC_REQUIRE(varerr::detail::IsNormalizedPack<Universe, E<0>, E<1>, E<2>>);
+    STATIC_REQUIRE(varerr::IsNormalizedPack<Universe>);
+    STATIC_REQUIRE(varerr::IsNormalizedPack<Universe, E<0>>);
+    STATIC_REQUIRE(varerr::IsNormalizedPack<Universe, E<0>, E<1>>);
+    STATIC_REQUIRE(varerr::IsNormalizedPack<Universe, E<0>, E<1>, E<2>>);
 
-    STATIC_REQUIRE_FALSE(varerr::detail::IsNormalizedPack<Universe, E<1>, E<0>>);
-    STATIC_REQUIRE_FALSE(varerr::detail::IsNormalizedPack<Universe, E<0>, E<2>, E<1>>);
-    STATIC_REQUIRE_FALSE(varerr::detail::IsNormalizedPack<Universe, E<0>, E<1>, int, E<2>>);
+    STATIC_REQUIRE_FALSE(varerr::IsNormalizedPack<Universe, E<1>, E<0>>);
+    STATIC_REQUIRE_FALSE(varerr::IsNormalizedPack<Universe, E<0>, E<2>, E<1>>);
+    STATIC_REQUIRE_FALSE(varerr::IsNormalizedPack<Universe, E<0>, E<1>, int, E<2>>);
 
     STATIC_REQUIRE(varerr::IsNormalizedRow<Universe, varerr::Row<>>);
     STATIC_REQUIRE(varerr::IsNormalizedRow<Universe, varerr::Row<E<0>>>);
@@ -236,24 +237,24 @@ TEST_CASE("varset_normalized", "[varset][row][normalized]") {
 
 TEST_CASE("status_impl_static", "[status][impl][static]") {
 
-    STATIC_REQUIRE_FALSE(std::is_constructible_v<varerr::detail::StatusImpl<Universe>>);
-    STATIC_REQUIRE_FALSE(std::is_default_constructible_v<varerr::detail::StatusImpl<Universe>>);
-    STATIC_REQUIRE_FALSE(std::is_default_constructible_v<varerr::detail::StatusImpl<Universe, E<1>>>);
+    STATIC_REQUIRE_FALSE(std::is_constructible_v<varerr::BasicStatus<Universe>>);
+    STATIC_REQUIRE_FALSE(std::is_default_constructible_v<varerr::BasicStatus<Universe>>);
+    STATIC_REQUIRE_FALSE(std::is_default_constructible_v<varerr::BasicStatus<Universe, E<1>>>);
 
-    STATIC_REQUIRE(std::is_trivially_destructible_v<varerr::detail::StatusImpl<Universe>>);
-    STATIC_REQUIRE(std::is_trivially_destructible_v<varerr::detail::StatusImpl<Universe, E<1>>>);
+    STATIC_REQUIRE(std::is_trivially_destructible_v<varerr::BasicStatus<Universe>>);
+    STATIC_REQUIRE(std::is_trivially_destructible_v<varerr::BasicStatus<Universe, E<1>>>);
 
-    STATIC_REQUIRE(std::is_trivially_copyable_v<varerr::detail::StatusImpl<Universe>>);
-    STATIC_REQUIRE(std::is_trivially_copy_assignable_v<varerr::detail::StatusImpl<Universe>>);
-    STATIC_REQUIRE(std::is_trivially_copy_constructible_v<varerr::detail::StatusImpl<Universe>>);
-    STATIC_REQUIRE(std::is_trivially_move_assignable_v<varerr::detail::StatusImpl<Universe>>);
-    STATIC_REQUIRE(std::is_trivially_move_constructible_v<varerr::detail::StatusImpl<Universe>>);
+    STATIC_REQUIRE(std::is_trivially_copyable_v<varerr::BasicStatus<Universe>>);
+    STATIC_REQUIRE(std::is_trivially_copy_assignable_v<varerr::BasicStatus<Universe>>);
+    STATIC_REQUIRE(std::is_trivially_copy_constructible_v<varerr::BasicStatus<Universe>>);
+    STATIC_REQUIRE(std::is_trivially_move_assignable_v<varerr::BasicStatus<Universe>>);
+    STATIC_REQUIRE(std::is_trivially_move_constructible_v<varerr::BasicStatus<Universe>>);
 
-    STATIC_REQUIRE(std::is_trivially_copyable_v<varerr::detail::StatusImpl<Universe, E<0>>>);
-    STATIC_REQUIRE(std::is_trivially_copy_assignable_v<varerr::detail::StatusImpl<Universe, E<0>>>);
-    STATIC_REQUIRE(std::is_trivially_copy_constructible_v<varerr::detail::StatusImpl<Universe, E<0>>>);
-    STATIC_REQUIRE(std::is_trivially_move_assignable_v<varerr::detail::StatusImpl<Universe, E<0>>>);
-    STATIC_REQUIRE(std::is_trivially_move_constructible_v<varerr::detail::StatusImpl<Universe, E<0>>>);
+    STATIC_REQUIRE(std::is_trivially_copyable_v<varerr::BasicStatus<Universe, E<0>>>);
+    STATIC_REQUIRE(std::is_trivially_copy_assignable_v<varerr::BasicStatus<Universe, E<0>>>);
+    STATIC_REQUIRE(std::is_trivially_copy_constructible_v<varerr::BasicStatus<Universe, E<0>>>);
+    STATIC_REQUIRE(std::is_trivially_move_assignable_v<varerr::BasicStatus<Universe, E<0>>>);
+    STATIC_REQUIRE(std::is_trivially_move_constructible_v<varerr::BasicStatus<Universe, E<0>>>);
 
 }
 
@@ -270,7 +271,7 @@ struct ExpectedLayout final {
 TEST_CASE("status_impl_memory", "[status][impl][memory]") {
 
     using St = varerr::detail::Storage<E<0>, E<1>, E<2>>;
-    using Si = varerr::detail::StatusImpl<Universe, E<0>, E<1>, E<2>>;
+    using Si = varerr::BasicStatus<Universe, E<0>, E<1>, E<2>>;
 
     STATIC_REQUIRE(sizeof(Si) >= sizeof(St));
     STATIC_REQUIRE(alignof(Si) == std::max(alignof(std::size_t), alignof(St)));
@@ -284,28 +285,28 @@ TEST_CASE("status_impl_memory", "[status][impl][memory]") {
 TEST_CASE("status_impl_normalize", "[status][impl][functional]") {
 
     STATIC_REQUIRE(std::same_as<
-        varerr::detail::Status<Universe, E<0>, E<1>>,
-        varerr::detail::StatusImpl<Universe, E<0>, E<1>>
+        varerr::Status<Universe, E<0>, E<1>>,
+        varerr::BasicStatus<Universe, E<0>, E<1>>
     >);
 
     STATIC_REQUIRE(std::same_as<
-        varerr::detail::Status<Universe, E<1>, E<0>>,
-        varerr::detail::StatusImpl<Universe, E<0>, E<1>>
+        varerr::Status<Universe, E<1>, E<0>>,
+        varerr::BasicStatus<Universe, E<0>, E<1>>
     >);
 
     STATIC_REQUIRE(std::same_as<
-        varerr::detail::Status<Universe, E<0>, E<0>>,
-        varerr::detail::StatusImpl<Universe, E<0>>
+        varerr::Status<Universe, E<0>, E<0>>,
+        varerr::BasicStatus<Universe, E<0>>
     >);
 
     STATIC_REQUIRE(std::same_as<
-        varerr::detail::Status<Universe>,
-        varerr::detail::StatusImpl<Universe>
+        varerr::Status<Universe>,
+        varerr::BasicStatus<Universe>
     >);
 
     STATIC_REQUIRE(std::same_as<
-        varerr::detail::Status<Universe, E<5>, E<2>, E<2>, E<8>, E<1>, E<2>, E<4>, E<2>>,
-        varerr::detail::StatusImpl<Universe, E<1>, E<2>, E<4>, E<5>, E<8>>
+        varerr::Status<Universe, E<5>, E<2>, E<2>, E<8>, E<1>, E<2>, E<4>, E<2>>,
+        varerr::BasicStatus<Universe, E<1>, E<2>, E<4>, E<5>, E<8>>
     >);
 
 }

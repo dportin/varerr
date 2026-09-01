@@ -38,3 +38,5 @@ Clang-Tidy is enabled for all configurations. IWYU is enabled only for Clang con
 - Consider providing a static factory method to in-place construct the error branch of BasicResult.
 - Missing uniqueness/de-duplication coverage for `row_normalize_t`.
 - Simplify some compile-time functions with `constexpr_for` (`test_algebra.cpp`).
+
+- Names in test cases (currently just prints tuple index).

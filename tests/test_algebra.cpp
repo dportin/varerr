@@ -1,5 +1,6 @@
 #include <catch2/catch_test_macros.hpp>
 
+#include "include/utilities.hpp"
 #include "include/universe.hpp"
 
 #include <varerr/status.hpp>
@@ -12,6 +13,7 @@
 
 // Tests for row algebra implementation.
 
+using namespace varerr::tests;
 using namespace varerr::tests::universe;
 
 namespace {
@@ -171,21 +173,12 @@ void row_algebra_compare_test(Pred pred) {
 
 }
 
-// Iterate over a sequence of comparison tables with dependent lengths.
-
-template <std::size_t N, typename F>
-constexpr void constexpr_for(F f) {
-    [&]<std::size_t... Is>(std::index_sequence<Is...>) {
-        (f(std::integral_constant<std::size_t, Is>{}), ...);
-    }(std::make_index_sequence<N>{});
-}
-
 } // namespace
 
 // Missing uniqueness/de-duplication coverage for row_normalize_t.
 
 TEST_CASE("row_algebra_normalize_permutation", "[row_algebra]") {
-    constexpr_for<kErrRowMaskBound>([](const auto mask) -> void {
+    iterate_index_sequence<kErrRowMaskBound>([](const auto mask) -> void {
         constexpr std::size_t Mask = decltype(mask)::value;
         constexpr std::size_t MaskElems = std::popcount(Mask);
         constexpr std::size_t MaskPerms = factorial(MaskElems);

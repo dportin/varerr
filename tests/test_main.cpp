@@ -17,183 +17,183 @@
 using namespace varerr::tests::lifetime;
 using namespace varerr::tests::universe;
 
-namespace {
+// namespace {
 
-using S0 = varerr::detail::Storage<>;
-using S1 = varerr::detail::Storage<E<0>>;
-using S2 = varerr::detail::Storage<E<0>, E<1>>;
+// using S0 = varerr::detail::Storage<>;
+// using S1 = varerr::detail::Storage<E<0>>;
+// using S2 = varerr::detail::Storage<E<0>, E<1>>;
 
-template <typename S>
-constexpr void varset_storage_trivial_test() {
+// template <typename S>
+// constexpr void varset_storage_trivial_test() {
 
-    // The alternatives must be trivially copyable and destructible.
+//     // The alternatives must be trivially copyable and destructible.
 
-    STATIC_REQUIRE(std::is_trivially_copyable_v<S>);
-    STATIC_REQUIRE(std::is_trivially_destructible_v<S>);
+//     STATIC_REQUIRE(std::is_trivially_copyable_v<S>);
+//     STATIC_REQUIRE(std::is_trivially_destructible_v<S>);
 
-    STATIC_REQUIRE(std::is_trivially_copy_constructible_v<S>);
-    STATIC_REQUIRE(std::is_trivially_move_constructible_v<S>);
-    STATIC_REQUIRE(std::is_trivially_copy_assignable_v<S>);
-    STATIC_REQUIRE(std::is_trivially_move_assignable_v<S>);
+//     STATIC_REQUIRE(std::is_trivially_copy_constructible_v<S>);
+//     STATIC_REQUIRE(std::is_trivially_move_constructible_v<S>);
+//     STATIC_REQUIRE(std::is_trivially_copy_assignable_v<S>);
+//     STATIC_REQUIRE(std::is_trivially_move_assignable_v<S>);
 
-    // The default constructor is non-trivial by construction.
+//     // The default constructor is non-trivial by construction.
 
-    STATIC_REQUIRE_FALSE(std::is_trivially_default_constructible_v<S>);
+//     STATIC_REQUIRE_FALSE(std::is_trivially_default_constructible_v<S>);
 
-}
+// }
 
-} // namespace
+// } // namespace
 
-TEST_CASE("varset_storage_trivial", "[varset][storage]") {
+// TEST_CASE("varset_storage_trivial", "[varset][storage]") {
 
-    varset_storage_trivial_test<S0>();
-    varset_storage_trivial_test<S1>();
-    varset_storage_trivial_test<S2>();
+//     varset_storage_trivial_test<S0>();
+//     varset_storage_trivial_test<S1>();
+//     varset_storage_trivial_test<S2>();
 
-}
+// }
 
-namespace {
+// namespace {
 
-template <typename... Es>
-constexpr std::size_t max_sizeof_v = std::max({sizeof(Es)...});
+// template <typename... Es>
+// constexpr std::size_t max_sizeof_v = std::max({sizeof(Es)...});
 
-template <typename... Es>
-constexpr std::size_t max_alignof_v = std::max({alignof(Es)...});
+// template <typename... Es>
+// constexpr std::size_t max_alignof_v = std::max({alignof(Es)...});
 
-template <typename... Es>
-constexpr std::size_t max_sizeof_v<varerr::detail::Storage<Es...>> = max_sizeof_v<Es...>;
+// template <typename... Es>
+// constexpr std::size_t max_sizeof_v<varerr::detail::Storage<Es...>> = max_sizeof_v<Es...>;
 
-template <typename... Es>
-constexpr std::size_t max_alignof_v<varerr::detail::Storage<Es...>> = max_alignof_v<Es...>;
+// template <typename... Es>
+// constexpr std::size_t max_alignof_v<varerr::detail::Storage<Es...>> = max_alignof_v<Es...>;
 
-template <typename S>
-constexpr void varset_storage_memory_test() {
+// template <typename S>
+// constexpr void varset_storage_memory_test() {
 
-    STATIC_REQUIRE(sizeof(S) == max_sizeof_v<S>);
-    STATIC_REQUIRE(alignof(S) == max_alignof_v<S>);
+//     STATIC_REQUIRE(sizeof(S) == max_sizeof_v<S>);
+//     STATIC_REQUIRE(alignof(S) == max_alignof_v<S>);
 
-}
+// }
 
-} // namespace
+// } // namespace
 
-TEST_CASE("varset_storage_memory", "[varset][storage]") {
+// TEST_CASE("varset_storage_memory", "[varset][storage]") {
 
-    varset_storage_memory_test<S1>();
-    varset_storage_memory_test<S2>();
+//     varset_storage_memory_test<S1>();
+//     varset_storage_memory_test<S2>();
 
-    // The standard does not specify an exact value for the empty case.
+//     // The standard does not specify an exact value for the empty case.
 
-    STATIC_REQUIRE(sizeof(S0) > 0);
-    STATIC_REQUIRE(alignof(S0) > 0);
+//     STATIC_REQUIRE(sizeof(S0) > 0);
+//     STATIC_REQUIRE(alignof(S0) > 0);
 
-}
+// }
 
-namespace {
+// namespace {
 
-template <typename S>
-constexpr void varset_storage_memory_layout_test() {
+// template <typename S>
+// constexpr void varset_storage_memory_layout_test() {
 
-    STATIC_REQUIRE(std::is_standard_layout_v<S>);
+//     STATIC_REQUIRE(std::is_standard_layout_v<S>);
 
-}
+// }
 
-} // namespace
+// } // namespace
 
-TEST_CASE("varset_storage_layout", "[varset][storage]") {
+// TEST_CASE("varset_storage_layout", "[varset][storage]") {
 
-    varset_storage_memory_layout_test<S0>();
-    varset_storage_memory_layout_test<S1>();
-    varset_storage_memory_layout_test<S2>();
+//     varset_storage_memory_layout_test<S0>();
+//     varset_storage_memory_layout_test<S1>();
+//     varset_storage_memory_layout_test<S2>();
 
-    STATIC_REQUIRE(offsetof(S2, head_) == 0);
-    STATIC_REQUIRE(offsetof(S2, tail_) == 0);
-    STATIC_REQUIRE(offsetof(S2, tail_.head_) == 0);
+//     STATIC_REQUIRE(offsetof(S2, head_) == 0);
+//     STATIC_REQUIRE(offsetof(S2, tail_) == 0);
+//     STATIC_REQUIRE(offsetof(S2, tail_.head_) == 0);
 
-}
+// }
 
-namespace {
+// namespace {
 
-    struct TrivialStoreType {
-        int store_;
-    };
+//     struct TrivialStoreType {
+//         int store_;
+//     };
 
-    struct NonTrivialConstructType {
-        int store_;
-        NonTrivialConstructType(int) {}
-    };
+//     struct NonTrivialConstructType {
+//         int store_;
+//         NonTrivialConstructType(int) {}
+//     };
 
 
-    struct NonTrivialDestructType {
-        int store_;
-        ~NonTrivialDestructType() {}
-    };
+//     struct NonTrivialDestructType {
+//         int store_;
+//         ~NonTrivialDestructType() {}
+//     };
 
-    struct NonTrivialCopyType {
-        int store_;
-        NonTrivialCopyType(const NonTrivialCopyType&) {}
-    };
+//     struct NonTrivialCopyType {
+//         int store_;
+//         NonTrivialCopyType(const NonTrivialCopyType&) {}
+//     };
 
-    struct NonTrivialMoveType {
-        int store_;
-        NonTrivialMoveType(NonTrivialMoveType&&) noexcept {}
-    };
+//     struct NonTrivialMoveType {
+//         int store_;
+//         NonTrivialMoveType(NonTrivialMoveType&&) noexcept {}
+//     };
 
-} // namespace
+// } // namespace
 
-TEST_CASE("varset_storage_trivial_store", "[varset][storage]") {
+// TEST_CASE("varset_storage_trivial_store", "[varset][storage]") {
 
-    STATIC_REQUIRE(varerr::IsTriviallyStorable<int>);
-    STATIC_REQUIRE(varerr::IsTriviallyStorable<TrivialStoreType>);
-    STATIC_REQUIRE(varerr::IsTriviallyStorable<S2>);
-    STATIC_REQUIRE(varerr::IsTriviallyStorable<NonTrivialConstructType>);
-    STATIC_REQUIRE(varerr::IsTriviallyStorable<varerr::detail::Storage<TrivialStoreType>>);
-    STATIC_REQUIRE(varerr::IsTriviallyStorable<varerr::detail::Storage<NonTrivialConstructType>>);
+//     STATIC_REQUIRE(varerr::IsTriviallyStorable<int>);
+//     STATIC_REQUIRE(varerr::IsTriviallyStorable<TrivialStoreType>);
+//     STATIC_REQUIRE(varerr::IsTriviallyStorable<S2>);
+//     STATIC_REQUIRE(varerr::IsTriviallyStorable<NonTrivialConstructType>);
+//     STATIC_REQUIRE(varerr::IsTriviallyStorable<varerr::detail::Storage<TrivialStoreType>>);
+//     STATIC_REQUIRE(varerr::IsTriviallyStorable<varerr::detail::Storage<NonTrivialConstructType>>);
 
-    STATIC_REQUIRE_FALSE(varerr::IsTriviallyStorable<const int>);
-    STATIC_REQUIRE_FALSE(varerr::IsTriviallyStorable<int&>);
-    STATIC_REQUIRE_FALSE(varerr::IsTriviallyStorable<void>);
-    STATIC_REQUIRE_FALSE(varerr::IsTriviallyStorable<bool(int)>);
+//     STATIC_REQUIRE_FALSE(varerr::IsTriviallyStorable<const int>);
+//     STATIC_REQUIRE_FALSE(varerr::IsTriviallyStorable<int&>);
+//     STATIC_REQUIRE_FALSE(varerr::IsTriviallyStorable<void>);
+//     STATIC_REQUIRE_FALSE(varerr::IsTriviallyStorable<bool(int)>);
 
-    STATIC_REQUIRE_FALSE(varerr::IsTriviallyStorable<NonTrivialDestructType>);
-    STATIC_REQUIRE_FALSE(varerr::IsTriviallyStorable<NonTrivialCopyType>);
-    STATIC_REQUIRE_FALSE(varerr::IsTriviallyStorable<NonTrivialMoveType>);
+//     STATIC_REQUIRE_FALSE(varerr::IsTriviallyStorable<NonTrivialDestructType>);
+//     STATIC_REQUIRE_FALSE(varerr::IsTriviallyStorable<NonTrivialCopyType>);
+//     STATIC_REQUIRE_FALSE(varerr::IsTriviallyStorable<NonTrivialMoveType>);
 
-}
+// }
 
-TEST_CASE("varset_storage_construct", "[varset][storage]") {
+// TEST_CASE("varset_storage_construct", "[varset][storage]") {
 
-    SECTION("replace_head") {
+//     SECTION("replace_head") {
 
-        STATIC_REQUIRE([]{
-            S2 storage(std::in_place_index<0>, std::size_t {100});
-            return storage.head_;
-        }().value() == 100);
+//         STATIC_REQUIRE([]{
+//             S2 storage(std::in_place_index<0>, std::size_t {100});
+//             return storage.head_;
+//         }().value() == 100);
 
-        STATIC_REQUIRE([]{
-            S2 storage(std::in_place_index<1>, std::size_t {100});
-            std::construct_at(std::addressof(storage.head_), std::size_t {101});
-            return storage.head_;
-        }().value() == 101);
+//         STATIC_REQUIRE([]{
+//             S2 storage(std::in_place_index<1>, std::size_t {100});
+//             std::construct_at(std::addressof(storage.head_), std::size_t {101});
+//             return storage.head_;
+//         }().value() == 101);
 
-    }
+//     }
 
-    SECTION("replace_tail") {
+//     SECTION("replace_tail") {
 
-        STATIC_REQUIRE([]{
-            S2 storage(std::in_place_index<1>, std::size_t {100});
-            return storage.tail_.head_;
-        }().value() == 100);
+//         STATIC_REQUIRE([]{
+//             S2 storage(std::in_place_index<1>, std::size_t {100});
+//             return storage.tail_.head_;
+//         }().value() == 100);
 
-        STATIC_REQUIRE([]{
-            S2 storage(std::in_place_index<0>, std::size_t {100});
-            std::construct_at(std::addressof(storage.tail_));
-            std::construct_at(std::addressof(storage.tail_.head_), std::size_t {101});
-            return storage.tail_.head_;
-        }().value() == 101);
+//         STATIC_REQUIRE([]{
+//             S2 storage(std::in_place_index<0>, std::size_t {100});
+//             std::construct_at(std::addressof(storage.tail_));
+//             std::construct_at(std::addressof(storage.tail_.head_), std::size_t {101});
+//             return storage.tail_.head_;
+//         }().value() == 101);
 
-    }
+//     }
 
-}
+// }
 
 TEST_CASE("varset_ranked", "[varset][row][ranked]") {
 

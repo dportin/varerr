@@ -98,7 +98,7 @@ struct H {
 
     static_assert(A <= kMaxLogAlign, "A must not exceed kMaxLogAlign");
 
-    alignas(std::size_t {1} << A) unsigned char value_[N]; // NOLINT
+    alignas((std::size_t {1} << A)) unsigned char value_[N]; // NOLINT
 
     constexpr explicit H(std::size_t value) noexcept {
         for (std::size_t i = 0; i < N; ++i) {

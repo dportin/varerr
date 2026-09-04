@@ -61,9 +61,20 @@ noexcept(is_nothrow_invocable_over_index_sequence_v<F, N>) {
 
 } // namespace detail
 
-template <typename F, typename Self, typename... Es>
+// template <typename F, typename Self, typename... Es>
+// inline constexpr bool is_nothrow_visitable_v =
+//     (std::is_nothrow_invocable_v<F, decltype(std::forward_like<Self>(std::declval<Es&>()))> && ...);
+
+// More conservative than necessary but easier to reason about. The loss of pre-
+// cision matters only for visitors that are nothrow-invocable for some but not
+// all qualifications of a trivially copyable argument.
+
+template <typename F, typename... Es>
 inline constexpr bool is_nothrow_visitable_v =
-    (std::is_nothrow_invocable_v<F, decltype(std::forward_like<Self>(std::declval<Es&>()))> && ...);
+    (std::is_nothrow_invocable_v<F, Es&> && ...) &&
+    (std::is_nothrow_invocable_v<F, const Es&> && ...) &&
+    (std::is_nothrow_invocable_v<F, Es&&> && ...) &&
+    (std::is_nothrow_invocable_v<F, const Es&&> && ...);
 
 template <typename Self, typename T>
 using const_preserving_pointer_t = std::conditional_t<std::is_const_v<std::remove_reference_t<Self>>, const T*, T*>;
@@ -145,13 +156,15 @@ struct BasicStatus final {
 
     // Dispatch visitor to active member by index.
 
+
     template <typename Self, typename F>
     constexpr decltype(auto) visit(this Self&& self, F&& f)
-    noexcept(is_nothrow_visitable_v<F, Self, Es...>) {
+    noexcept(is_nothrow_visitable_v<F, Es...>) {
+    // noexcept((std::is_nothrow_invocable_v<F, decltype(std::forward_like<Self>(std::declval<Es&>()))> && ...)) {
         return detail::dispatch<sizeof...(Es)>(
             self.active_,
             [&]<std::size_t I>(std::integral_constant<std::size_t, I>) -> decltype(auto) {
-                return std::forward<F>(f)(std::forward_like<Self>(storage_get<I>(self.alternatives_)));
+                return std::forward<F>(f)(storage_get<I>(std::forward<Self>(self).alternatives_));
             }
         );
     }

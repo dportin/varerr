@@ -11,7 +11,7 @@
 // status class forming the unexpected branch of the main result class. The al-
 // ternatives must be trivially copyable for the storage class to be implement-
 // ed as a raw recursive union with no destructor accounting. The status class
-// inherits trivial copyability, making it cheap and unconditionally noexcept.
+// inherits trivial copyability (making it cheap and unconditionally noexcept).
 
 namespace varerr {
 
@@ -21,9 +21,9 @@ concept IsStorable =
     !std::is_array_v<E> &&
     std::same_as<E, std::remove_cv_t<E>>;
 
-// Note that trivial copyability implies trivial destructibility, since every
-// trivially copyable type must have a non-deleted trivial destructor. The re-
-// quirement is repeated here for clarity.
+// Trivial copyability implies trivial destructibility since every trivially co-
+// pyable class has a non-deleted trivial destructor. The requirement is repeat-
+// ed here for clarity.
 
 template <typename E>
 concept IsTriviallyStorable =
@@ -46,7 +46,7 @@ union Storage<E, Es...> {
     E head_;
     Storage<Es...> tail_;
 
-    // PR1331R2 relaxes the requirement that every non-variant, non-static data
+    // P1331R2 relaxes the requirement that every non-variant, non-static data
     // member and base class sub-object must be initialized in a constexpr con-
     // text (provided that the uninitialized values are not accessed).
 
@@ -68,67 +68,68 @@ union Storage<E, Es...> {
 
 };
 
-// Determine whether a type is a storage type.
+// Determine whether a type is a Storage.
 
 template <typename S>
 struct is_storage : std::false_type {};
 
-template <IsTriviallyStorable... Es>
+template <typename... Es>
 struct is_storage<Storage<Es...>> : std::true_type {};
 
 template <typename S>
-inline constexpr bool is_storage_v = is_storage<S>::value;
+inline constexpr bool is_storage_v = is_storage<std::remove_cvref_t<S>>::value;
 
 template <typename S>
-concept IsStorage = is_storage_v<std::remove_cvref_t<S>>;
+concept IsStorage = is_storage_v<S>;
 
-// Determine the number of alternatives in a storage type.
+// Determine the number of alternatives in a Storage.
 
 template <typename S>
 struct storage_size;
 
-template <IsTriviallyStorable... Es>
+template <typename... Es>
 struct storage_size<Storage<Es...>> : std::integral_constant<std::size_t, sizeof...(Es)> {};
 
 template <IsStorage S>
 inline constexpr std::size_t storage_size_v = storage_size<std::remove_cvref_t<S>>::value;
 
-// Determine the type of the alternative at index N in a storage type.
+// Determine the type of the alternative at index N in a Storage.
 
 template <std::size_t N, typename S>
 struct storage_alternative;
 
-template <IsTriviallyStorable E, IsTriviallyStorable... Es>
+template <typename E, typename... Es>
 struct storage_alternative<0, Storage<E, Es...>> : std::type_identity<E> {};
 
-template <std::size_t N, IsTriviallyStorable E, IsTriviallyStorable... Es>
+template <std::size_t N, typename E, typename... Es>
 struct storage_alternative<N, Storage<E, Es...>> : storage_alternative<N - 1, Storage<Es...>> {};
 
 template <std::size_t N, IsStorage S>
 requires (N < storage_size_v<S>)
 using storage_alternative_t = typename storage_alternative<N, std::remove_cvref_t<S>>::type;
 
-// Return a reference to the alternative at index N in a storage type. Reading
-// the reference is undefined if it does not refer to the active alternative.
+// Return a reference to the alternative at index N in a Storage. Reading the
+// reference is undefined if it does not refer to the active alternative.
 
 template <std::size_t N, IsStorage S>
 requires (N < storage_size_v<S>)
-[[nodiscard]] constexpr auto& storage_get(S& storage) noexcept {
+[[nodiscard]] constexpr decltype(auto) storage_get(S&& storage) noexcept {
     if constexpr (N == 0) {
-        return storage.head_;
+        return (std::forward<S>(storage).head_); /* deduce reference */
     } else {
-        return storage_get<N - 1>(storage.tail_);
+        return storage_get<N - 1>(std::forward<S>(storage).tail_);
     }
 }
 
-// Activate each union on the path to the alternative at index N in a storage
-// type, leaving the selected alternative as raw storage for the caller to con-
-// struct in-place. The previously active alternative is discarded without cal-
-// ling its destructor. This is well-defined because every alternative is triv-
-// ially destructible by construction.
+// Activate each union on the path to the alternative at index N in a Storage,
+// leaving the selected alternative as raw storage for the caller to construct
+// in-place. The previously active alternative is discarded without calling its
+// destructor. This is well-defined because every alternative is trivially de-
+// structible by construction.
 
 template <std::size_t N, IsStorage S>
 requires (!std::is_const_v<S>) &&
+         (!std::is_volatile_v<S>) &&
          (N < storage_size_v<S>)
 [[nodiscard]] constexpr auto* storage_emplace_impl(S& storage) noexcept {
     if constexpr (N == 0) {
@@ -140,10 +141,13 @@ requires (!std::is_const_v<S>) &&
 }
 
 // Activate the alternative at index N in a storage type. Note that the pointer
-// returned by std::construct_at is never null.
+// returned by std::construct_at is never null. Note that the non-const and non-
+// volatile constraints are valid because the S& parameter forces S to bind the
+// cv-unqualified type (thus there is no reference to strip from S).
 
 template <std::size_t N, IsStorage S, typename... Args>
 requires (!std::is_const_v<S>) &&
+         (!std::is_volatile_v<S>) &&
          (N < storage_size_v<S>) &&
          std::constructible_from<storage_alternative_t<N, S>, Args...>
 constexpr auto* storage_emplace(S& storage, Args&&... args)

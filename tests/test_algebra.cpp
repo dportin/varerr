@@ -3,7 +3,7 @@
 #include "include/utilities.hpp"
 #include "include/universe.hpp"
 
-#include <varerr/status.hpp>
+#include <varerr/algebra.hpp>
 
 #include <array>
 #include <bit>
@@ -11,15 +11,29 @@
 #include <type_traits>
 #include <utility>
 
-// Tests for row algebra implementation.
-
 using namespace varerr::tests;
 using namespace varerr::tests::universe;
 
 namespace {
 
-constexpr std::size_t kErrRowMaxElems = 4;
-constexpr std::size_t kErrRowMaskBound = std::size_t {1} << kErrRowMaxElems;
+// Exhaustively test compile-time ordered sets using k-element bitsets as refer-
+// ence implementation. Increasing the universe size exponentially scales compi-
+// le times. The following universes cover all relevant cases.
+
+constexpr std::size_t kAlgebraMaxBinaryElems = 4;
+constexpr std::size_t kAlgebraMaxBinaryMask = std::size_t {1} << kAlgebraMaxBinaryElems;
+
+constexpr std::size_t kAlgebraMaxTernaryElems = 3;
+constexpr std::size_t kAlgebraMaxTernaryMask = std::size_t {1} << kAlgebraMaxTernaryElems;
+
+// Lift the homogeneous test universe to a Row.
+
+template <std::size_t N>
+using L = lift_index_sequence_t<varerr::Row, E, N>;
+
+static_assert(std::same_as<L<0>, varerr::Row<>>);
+static_assert(std::same_as<L<1>, varerr::Row<E<0>>>);
+static_assert(std::same_as<L<2>, varerr::Row<E<0>,E<1>>>);
 
 // Prepend an element to a Row.
 
@@ -53,7 +67,7 @@ struct mask_to_row<Mask, std::index_sequence<I, Is...>> : std::conditional_t<
 template <std::size_t Mask>
 using mask_to_row_t = mask_to_row<Mask, std::make_index_sequence<std::bit_width(Mask)>>::type;
 
-// Naive computation of the nth set bit in a bitmask.
+// Naive computation of the Nth set bit in a bitmask.
 
 [[nodiscard]] constexpr std::size_t nth_set_bit(std::size_t mask, std::size_t n) noexcept {
 
@@ -84,7 +98,8 @@ using mask_to_row_t = mask_to_row<Mask, std::make_index_sequence<std::bit_width(
 
 }
 
-// Convert a Lehmer code into a row of E<I> elements.
+// Exhaustively test permutations of a k-element set corresponding to a given
+// mask by enumerating Lehmer codes corresponding to the set.
 
 template <std::size_t Code, std::size_t Mask>
 [[nodiscard]] consteval auto lehmer_code_to_row_impl() {
@@ -105,9 +120,9 @@ template <std::size_t Code, std::size_t Mask>
 
         // The quotient is the coefficient of the current factorial base, which
         // counts the number of remaining elements in the universe smaller than
-        // the decoded element (i.e., the number of inversions in the reduced u-
-        // niverse). The decoded element is thus the (coefficient + 1)th set bit
-        // in the current mask.
+        // the decoded element (the number of inversions in the reduced univer-
+        // se). The decoded element is thus the (coefficient + 1)th set bit in
+        // the current mask.
 
         const std::size_t base = factorial(size);
         const std::size_t inversions = code / base;
@@ -140,34 +155,72 @@ struct lehmer_code_to_row {
 template <std::size_t Code, std::size_t Mask>
 using lehmer_code_to_row_t = lehmer_code_to_row<Code, Mask>::type;
 
-// Build compile-time comparison table between row and bitset operations.
+// Build binary compile-time comparison table between row and bitset operations.
 
-template <std::size_t Rows, std::size_t Cols, std::size_t Row, typename Pred, std::size_t... Col>
-consteval void build_compare_table_cols(std::array<bool, Rows * Cols>& table, Pred pred, std::index_sequence<Col...>) {
-    ((table[Row * Cols + Col] = pred.template operator()<Rows, Cols, Row, Col>()), ...);
-}
+template <std::size_t D0, std::size_t D1, typename Pred>
+consteval auto build_compare_table2(Pred pred) {
 
-template <std::size_t Rows, std::size_t Cols, typename Pred, std::size_t... Row>
-consteval void build_compare_table_rows(std::array<bool, Rows * Cols>& table, Pred pred, std::index_sequence<Row...>) {
-    (build_compare_table_cols<Rows, Cols, Row>(table, pred, std::make_index_sequence<Cols> {}), ...);
-}
+    std::array<bool, D0 * D1> table {};
 
-template <std::size_t Rows, std::size_t Cols, typename Pred>
-consteval auto build_compare_table(Pred pred) {
-    std::array<bool, Rows * Cols> table {};
-    build_compare_table_rows<Rows, Cols>(table, pred, std::make_index_sequence<Rows> {});
+    iterate_index_sequence<D0>([&](const auto x) {
+        constexpr std::size_t X = decltype(x)::value;
+        iterate_index_sequence<D1>([&](const auto y) {
+            constexpr std::size_t Y = decltype(y)::value;
+            table[X * D1 + Y] = pred(x, y);
+        });
+    });
+
     return table;
+
 }
 
-template <std::size_t Rows, std::size_t Cols, typename Pred>
-void row_algebra_compare_test(Pred pred) {
+template <std::size_t D0, std::size_t D1, typename Pred>
+void row_algebra_compare_test2(Pred pred) {
 
-    constexpr auto buffer = build_compare_table<Rows, Cols>(pred);
+    constexpr auto table = build_compare_table2<D0, D1>(pred);
 
-    for (std::size_t row = 0; row < Rows; ++row) {
-        for (std::size_t col = 0; col < Cols; ++col) {
-            CAPTURE(row, col);
-            REQUIRE(buffer[row * Cols + col]);
+    for (std::size_t x = 0; x < D0; ++x) {
+        for (std::size_t y = 0; y < D1; ++y) {
+            CAPTURE(x, y);
+            REQUIRE(table[x * D1 + y]);
+        }
+    }
+
+}
+
+// Build ternary compile-time comparison table between row and bitset operations.
+
+template <std::size_t D0, std::size_t D1, std::size_t D2, typename Pred>
+consteval auto build_compare_table3(Pred pred) {
+
+    std::array<bool, D0 * D1 * D2> table {};
+
+    iterate_index_sequence<D0>([&](const auto x) {
+        constexpr std::size_t X = decltype(x)::value;
+        iterate_index_sequence<D1>([&](const auto y) {
+            constexpr std::size_t Y = decltype(y)::value;
+            iterate_index_sequence<D2>([&](const auto z) {
+                constexpr std::size_t Z = decltype(z)::value;
+                table[(X * D1 + Y) * D2 + Z] = pred(x, y, z);
+            });
+        });
+    });
+
+    return table;
+
+}
+
+template <std::size_t D0, std::size_t D1, std::size_t D2, typename Pred>
+void row_algebra_compare_test3(Pred pred) {
+
+    constexpr auto table = build_compare_table3<D0, D1, D2>(pred);
+
+    for (std::size_t x = 0; x < D0; ++x) {
+        for (std::size_t y = 0; y < D1; ++y) {
+            for (std::size_t z = 0; z < D2; ++z) {
+                CAPTURE(x, y, z);
+                REQUIRE(table[(x * D1 + y) * D2 + z]);
+            }
         }
     }
 
@@ -175,67 +228,278 @@ void row_algebra_compare_test(Pred pred) {
 
 } // namespace
 
-// Missing uniqueness/de-duplication coverage for row_normalize_t.
+TEST_CASE("varerr_algebra_traits_is_ranked", "[varerr][algebra]") {
 
-TEST_CASE("row_algebra_normalize_permutation", "[row_algebra]") {
-    iterate_index_sequence<kErrRowMaskBound>([](const auto mask) -> void {
+    iterate_cvref_matrix<E<0>>([]<typename T>(const std::type_identity<T>) {
+        STATIC_REQUIRE(varerr::IsRanked<UniverseE, T>);
+    });
+
+    iterate_cvref_matrix<H<8,3>>([]<typename T>(const std::type_identity<T>) {
+        STATIC_REQUIRE(varerr::IsRanked<UniverseH, T>);
+    });
+
+    STATIC_REQUIRE_FALSE(varerr::IsRanked<UniverseH, E<0>>);
+    STATIC_REQUIRE_FALSE(varerr::IsRanked<UniverseE, H<8,3>>);
+    STATIC_REQUIRE_FALSE(varerr::IsRanked<UniverseE, varerr::Row<>>);
+    STATIC_REQUIRE_FALSE(varerr::IsRanked<UniverseE, varerr::Row<E<0>>>);
+
+}
+
+TEST_CASE("varerr_algebra_traits_is_row", "[varerr][algebra]") {
+
+    constexpr std::size_t kAlgebraTraitsIsRowBound = 10;
+
+    iterate_index_sequence<kAlgebraTraitsIsRowBound>([](const auto index) {
+        constexpr std::size_t I = decltype(index)::value;
+        iterate_cvref_matrix<L<I>>([]<typename T>(const std::type_identity<T>) {
+            STATIC_REQUIRE(varerr::IsRow<T>);
+        });
+    });
+
+    STATIC_REQUIRE_FALSE(varerr::IsRow<int>);
+    STATIC_REQUIRE_FALSE(varerr::IsRow<E<0>>);
+
+}
+
+TEST_CASE("varerr_algebra_traits_is_ranked_row", "[varerr][algebra]") {
+
+    constexpr std::size_t kAlgebraTraitsIsRankedRowBound = 10;
+
+    iterate_index_sequence<kAlgebraTraitsIsRankedRowBound>([](const auto index) {
+        constexpr std::size_t I = decltype(index)::value;
+        iterate_cvref_matrix<L<I>>([]<typename T>(const std::type_identity<T>) {
+            STATIC_REQUIRE(varerr::IsRankedRow<UniverseE, T>);
+        });
+    });
+
+    STATIC_REQUIRE_FALSE(varerr::IsRankedRow<UniverseE, int>);
+    STATIC_REQUIRE_FALSE(varerr::IsRankedRow<UniverseH, L<2>>);
+    STATIC_REQUIRE_FALSE(varerr::IsRankedRow<UniverseE, varerr::Row<E<0>, int, E<1>>>);
+
+}
+
+TEST_CASE("varerr_algebra_traits_row_size", "[varerr][algebra]") {
+
+    constexpr std::size_t kAlgebraTraitsRowSizeBound = 10;
+
+    iterate_index_sequence<kAlgebraTraitsRowSizeBound>([](const auto index) {
+        constexpr std::size_t I = decltype(index)::value;
+        iterate_cvref_matrix<L<I>>([]<typename T>(const std::type_identity<T>) {
+            STATIC_REQUIRE(varerr::row_size_v<T> == I);
+        });
+    });
+
+}
+
+TEST_CASE("varerr_algebra_traits_is_normalized_row", "[varerr][algebra]") {
+
+    iterate_index_sequence<kAlgebraMaxBinaryMask>([](const auto mask) {
+
         constexpr std::size_t Mask = decltype(mask)::value;
         constexpr std::size_t MaskElems = std::popcount(Mask);
         constexpr std::size_t MaskPerms = factorial(MaskElems);
-        row_algebra_compare_test<1, MaskPerms>(
-            []<std::size_t, std::size_t, std::size_t, std::size_t Code>() consteval -> bool {
-                return std::same_as<varerr::row_normalize_t<Universe, lehmer_code_to_row_t<Code, Mask>>, mask_to_row_t<Mask>>;
-            }
-        );
-    });
-}
 
-TEST_CASE("row_algebra_subset_normalized", "[row_algebra]") {
-    row_algebra_compare_test<kErrRowMaskBound, kErrRowMaskBound>(
-        []<std::size_t, std::size_t, std::size_t N, std::size_t M>() consteval -> bool {
-            return varerr::row_subset_normalized_v<Universe, mask_to_row_t<N>, mask_to_row_t<M>> == ((N & ~M) == 0);
-        }
-    );
-}
-
-TEST_CASE("row_algebra_equiv_normalized", "[row_algebra]") {
-    row_algebra_compare_test<kErrRowMaskBound, kErrRowMaskBound>(
-        []<std::size_t, std::size_t, std::size_t N, std::size_t M>() consteval -> bool {
-            return varerr::row_equiv_normalized_v<Universe, mask_to_row_t<N>, mask_to_row_t<M>> == (N == M);
-        }
-    );
-}
-
-TEST_CASE("row_algebra_lookup_normalized", "[row_algebra]") {
-    row_algebra_compare_test<kErrRowMaxElems, kErrRowMaskBound>(
-        []<std::size_t, std::size_t, std::size_t N, std::size_t M>() consteval -> bool {
-            constexpr auto result = varerr::row_lookup_normalized_v<Universe, E<N>, mask_to_row_t<M>>;
-            constexpr auto present = static_cast<bool>((M >> N) & std::size_t {1});
-            constexpr auto position = static_cast<std::size_t>(std::popcount(M & ((std::size_t {1} << N) - 1)));
-            return present ? result.has_value() && result.value() == position : !result.has_value();
+        row_algebra_compare_test2<1, MaskPerms>([](const auto, const auto code) consteval -> bool {
+            constexpr std::size_t Code = decltype(code)::value;
+            using Row = mask_to_row_t<Mask>;
+            using RowPerm = lehmer_code_to_row_t<Code, Mask>;
+            return varerr::IsNormalizedRow<UniverseE, RowPerm> == std::same_as<Row, RowPerm>;
         });
+
+    });
+
+    iterate_cvref_matrix<L<5>>([]<typename T>(const std::type_identity<T>) {
+        STATIC_REQUIRE(varerr::IsNormalizedRow<UniverseE, T>);
+    });
+
 }
 
-TEST_CASE("row_algebra_union_normalized", "[row_algebra]") {
-    row_algebra_compare_test<kErrRowMaskBound, kErrRowMaskBound>(
-        []<std::size_t, std::size_t, std::size_t N, std::size_t M>() consteval -> bool {
-            return std::same_as<varerr::row_union_normalized_t<Universe, mask_to_row_t<N>, mask_to_row_t<M>>, mask_to_row_t<N | M>>;
-        }
-    );
+// Missing uniqueness and de-duplication coverage for Row normalization.
+
+TEST_CASE("varerr_algebra_normalize_permute", "[varerr][algebra]") {
+
+    iterate_index_sequence<kAlgebraMaxBinaryMask>([](const auto mask) {
+
+        constexpr std::size_t Mask = decltype(mask)::value;
+        constexpr std::size_t MaskElems = std::popcount(Mask);
+        constexpr std::size_t MaskPerms = factorial(MaskElems);
+
+        row_algebra_compare_test2<1, MaskPerms>([](const auto, const auto code) consteval -> bool {
+            constexpr std::size_t Code = decltype(code)::value;
+            return std::same_as<varerr::row_normalize_t<UniverseE, lehmer_code_to_row_t<Code, Mask>>, mask_to_row_t<Mask>>;
+        });
+
+    });
+
+    iterate_cvref_matrix<L<2>>([]<typename T>(const std::type_identity<T>) {
+        STATIC_REQUIRE(std::same_as<varerr::row_normalize_t<UniverseE, T>, varerr::Row<E<0>,E<1>>>);
+    });
+
 }
 
-TEST_CASE("row_algebra_intersection_normalized", "[row_algebra]") {
-    row_algebra_compare_test<kErrRowMaskBound, kErrRowMaskBound>(
-        []<std::size_t, std::size_t, std::size_t N, std::size_t M>() consteval -> bool {
-            return std::same_as<varerr::row_intersection_normalized_t<Universe, mask_to_row_t<N>, mask_to_row_t<M>>, mask_to_row_t<N & M>>;
-        }
-    );
+TEST_CASE("varerr_algebra_lookup_normalized", "[varerr][algebra]") {
+
+    row_algebra_compare_test2<kAlgebraMaxBinaryElems, kAlgebraMaxBinaryMask>([](const auto x, const auto y) consteval -> bool {
+
+        constexpr std::size_t X = decltype(x)::value;
+        constexpr std::size_t Y = decltype(y)::value;
+
+        constexpr auto result = varerr::row_lookup_normalized_v<UniverseE, E<X>, mask_to_row_t<Y>>;
+        constexpr auto present = static_cast<bool>((Y >> X) & std::size_t {1});
+        constexpr auto position = static_cast<std::size_t>(std::popcount(Y & ((std::size_t {1} << X) - 1)));
+
+        return present ? result.has_value() && result.value() == position : !result.has_value();
+
+    });
+
+    iterate_cvref_matrix<E<2>>([]<typename A>(const std::type_identity<A>) {
+        iterate_cvref_matrix<L<5>>([]<typename U>(const std::type_identity<U>) {
+            STATIC_REQUIRE(varerr::row_lookup_normalized_v<UniverseE, A, U>.value() == 2);
+            STATIC_REQUIRE(varerr::row_elem_normalized_v<UniverseE, A, U>);
+            STATIC_REQUIRE(varerr::row_index_normalized_v<UniverseE, A, U> == 2);
+        });
+    });
+
+
 }
 
-TEST_CASE("row_algebra_difference_normalized", "[row_algebra]") {
-    row_algebra_compare_test<kErrRowMaskBound, kErrRowMaskBound>(
-        []<std::size_t, std::size_t, std::size_t N, std::size_t M>() consteval -> bool {
-            return std::same_as<varerr::row_difference_normalized_t<Universe, mask_to_row_t<N>, mask_to_row_t<M>>, mask_to_row_t<N & ~M>>;
-        }
-    );
+TEST_CASE("varerr_algebra_subset_normalized", "[varerr][algebra]") {
+
+    row_algebra_compare_test2<kAlgebraMaxBinaryMask, kAlgebraMaxBinaryMask>([](const auto x, const auto y) consteval -> bool {
+        constexpr std::size_t X = decltype(x)::value;
+        constexpr std::size_t Y = decltype(y)::value;
+        return varerr::row_subset_normalized_v<UniverseE, mask_to_row_t<X>, mask_to_row_t<Y>> == ((X & ~Y) == 0);
+    });
+
+    iterate_cvref_matrix<L<1>>([]<typename U>(const std::type_identity<U>) {
+        iterate_cvref_matrix<L<3>>([]<typename V>(const std::type_identity<V>) {
+            STATIC_REQUIRE(varerr::row_subset_normalized_v<UniverseE, U, V>);
+        });
+    });
+
+}
+
+TEST_CASE("varerr_algebra_proper_subset_normalized", "[varerr][algebra]") {
+
+    row_algebra_compare_test2<kAlgebraMaxBinaryMask, kAlgebraMaxBinaryMask>([](const auto x, const auto y) consteval -> bool {
+        constexpr std::size_t X = decltype(x)::value;
+        constexpr std::size_t Y = decltype(y)::value;
+        return varerr::row_proper_subset_normalized_v<UniverseE, mask_to_row_t<X>, mask_to_row_t<Y>> == (((X & ~Y) == 0) && (X != Y));
+    });
+
+    iterate_cvref_matrix<L<1>>([]<typename U>(const std::type_identity<U>) {
+        iterate_cvref_matrix<L<3>>([]<typename V>(const std::type_identity<V>) {
+            STATIC_REQUIRE(varerr::row_proper_subset_normalized_v<UniverseE, U, V>);
+        });
+    });
+
+}
+
+TEST_CASE("varerr_algebra_equiv_normalized", "[varerr][algebra]") {
+
+    row_algebra_compare_test2<kAlgebraMaxBinaryMask, kAlgebraMaxBinaryMask>([](const auto x, const auto y) consteval -> bool {
+        constexpr std::size_t X = decltype(x)::value;
+        constexpr std::size_t Y = decltype(y)::value;
+        return varerr::row_equiv_normalized_v<UniverseE, mask_to_row_t<X>, mask_to_row_t<Y>> == (X == Y);
+    });
+
+    iterate_cvref_matrix<L<3>>([]<typename U>(const std::type_identity<U>) {
+        iterate_cvref_matrix<L<3>>([]<typename V>(const std::type_identity<V>) {
+            STATIC_REQUIRE(varerr::row_equiv_normalized_v<UniverseE, U, V>);
+        });
+    });
+
+}
+
+TEST_CASE("varerr_algebra_union_normalized", "[varerr][algebra]") {
+
+    row_algebra_compare_test2<kAlgebraMaxBinaryMask, kAlgebraMaxBinaryMask>([](const auto x, const auto y) consteval -> bool {
+        constexpr std::size_t X = decltype(x)::value;
+        constexpr std::size_t Y = decltype(y)::value;
+        return std::same_as<varerr::row_union_normalized_t<UniverseE, mask_to_row_t<X>, mask_to_row_t<Y>>, mask_to_row_t<X | Y>>;
+    });
+
+    iterate_cvref_matrix<varerr::Row<E<0>,E<1>>>([]<typename U>(const std::type_identity<U>) {
+        iterate_cvref_matrix<varerr::Row<E<1>,E<2>>>([]<typename V>(const std::type_identity<V>) {
+            STATIC_REQUIRE(std::same_as<varerr::row_union_normalized_t<UniverseE, U, V>, L<3>>);
+        });
+    });
+
+}
+
+TEST_CASE("varerr_algebra_union_normalized_ternary", "[varerr][algebra]") {
+
+    row_algebra_compare_test3<kAlgebraMaxTernaryMask, kAlgebraMaxTernaryMask, kAlgebraMaxTernaryMask>(
+        [](const auto x, const auto y, const auto z) consteval -> bool {
+            constexpr std::size_t X = decltype(x)::value;
+            constexpr std::size_t Y = decltype(y)::value;
+            constexpr std::size_t Z = decltype(z)::value;
+            return std::same_as<
+                varerr::row_union_normalized_t<UniverseE, mask_to_row_t<X>, mask_to_row_t<Y>, mask_to_row_t<Z>>,
+                mask_to_row_t<(X | Y) | Z>
+            >;
+        });
+
+}
+
+TEST_CASE("varerr_algebra_intersection_normalized", "[varerr][algebra]") {
+
+    row_algebra_compare_test2<kAlgebraMaxBinaryMask, kAlgebraMaxBinaryMask>([](const auto x, const auto y) consteval -> bool {
+        constexpr std::size_t X = decltype(x)::value;
+        constexpr std::size_t Y = decltype(y)::value;
+        return std::same_as<varerr::row_intersection_normalized_t<UniverseE, mask_to_row_t<X>, mask_to_row_t<Y>>, mask_to_row_t<X & Y>>;
+    });
+
+    iterate_cvref_matrix<varerr::Row<E<0>,E<1>>>([]<typename U>(const std::type_identity<U>) {
+        iterate_cvref_matrix<varerr::Row<E<1>,E<2>>>([]<typename V>(const std::type_identity<V>) {
+            STATIC_REQUIRE(std::same_as<varerr::row_intersection_normalized_t<UniverseE, U, V>, varerr::Row<E<1>>>);
+        });
+    });
+
+}
+
+TEST_CASE("varerr_algebra_intersection_normalized_ternary", "[varerr][algebra]") {
+
+    row_algebra_compare_test3<kAlgebraMaxTernaryMask, kAlgebraMaxTernaryMask, kAlgebraMaxTernaryMask>(
+        [](const auto x, const auto y, const auto z) consteval -> bool {
+            constexpr std::size_t X = decltype(x)::value;
+            constexpr std::size_t Y = decltype(y)::value;
+            constexpr std::size_t Z = decltype(z)::value;
+            return std::same_as<
+                varerr::row_intersection_normalized_t<UniverseE, mask_to_row_t<X>, mask_to_row_t<Y>, mask_to_row_t<Z>>,
+                mask_to_row_t<(X & Y) & Z>
+            >;
+        });
+
+}
+
+TEST_CASE("varerr_algebra_difference_normalized", "[varerr][algebra]") {
+
+    row_algebra_compare_test2<kAlgebraMaxBinaryMask, kAlgebraMaxBinaryMask>([](const auto x, const auto y) consteval -> bool {
+        constexpr std::size_t X = decltype(x)::value;
+        constexpr std::size_t Y = decltype(y)::value;
+        return std::same_as<varerr::row_difference_normalized_t<UniverseE, mask_to_row_t<X>, mask_to_row_t<Y>>, mask_to_row_t<X & ~Y>>;
+    });
+
+    iterate_cvref_matrix<varerr::Row<E<0>,E<1>,E<2>>>([]<typename U>(const std::type_identity<U>) {
+        iterate_cvref_matrix<varerr::Row<E<0>,E<2>>>([]<typename V>(const std::type_identity<V>) {
+            STATIC_REQUIRE(std::same_as<varerr::row_difference_normalized_t<UniverseE, U, V>, varerr::Row<E<1>>>);
+        });
+    });
+
+}
+
+TEST_CASE("varerr_algebra_difference_normalized_ternary", "[varerr][algebra]") {
+
+    row_algebra_compare_test3<kAlgebraMaxTernaryMask, kAlgebraMaxTernaryMask, kAlgebraMaxTernaryMask>(
+        [](const auto x, const auto y, const auto z) consteval -> bool {
+            constexpr std::size_t X = decltype(x)::value;
+            constexpr std::size_t Y = decltype(y)::value;
+            constexpr std::size_t Z = decltype(z)::value;
+            return std::same_as<
+                varerr::row_difference_normalized_t<UniverseE, mask_to_row_t<X>, mask_to_row_t<Y>, mask_to_row_t<Z>>,
+                mask_to_row_t<X & ~(Y | Z)>
+            >;
+        });
+
 }

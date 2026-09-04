@@ -18,6 +18,7 @@ Checks: >
   -zircon-*,
 
   -bugprone-easily-swappable-parameters,
+  -cppcoreguidelines-macro-usage,
   -cppcoreguidelines-non-private-member-variables-in-classes,
   -misc-no-recursion,
   -misc-non-private-member-variables-in-classes,
@@ -41,7 +42,8 @@ Checks: >
   -cppcoreguidelines-pro-type-union-access,
 
   -cert-dcl03-c,
-  -misc-static-assert
+  -misc-static-assert,
+
 
 WarningsAsErrors: '*'
 HeaderFilterRegex: '.*'

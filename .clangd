@@ -18,10 +18,13 @@ Diagnostics:
     Remove:
       - bugprone-sizeof-expression
       - readability-magic-numbers
+      - cppcoreguidelines-avoid-c-arrays
       - cppcoreguidelines-avoid-magic-numbers
       - cppcoreguidelines-pro-type-member-init
+      - cppcoreguidelines-pro-type-reinterpret-cast
       - cppcoreguidelines-special-member-functions
       - cppcoreguidelines-use-default-member-init
+      - modernize-avoid-c-arrays
       - modernize-use-default-member-init
       - modernize-use-equals-default
 

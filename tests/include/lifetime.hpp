@@ -121,8 +121,8 @@ struct Tracked {
         }
     }
 
-    // The local record tracks the lifetime of the current object while the glo-
-    // bal record persists across object lifetimes and tracks destructor calls.
+    // The local record tracks the lifetime of the current object; the global
+    // record persists across object lifetimes and can track destructor calls.
 
     Record local_;
     Record* global_;

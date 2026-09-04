@@ -4,7 +4,7 @@ include(CMakeDependentOption)
 
 project(varerr
     VERSION 0.0.1.0
-    DESCRIPTION "Experimental error-handling library"
+    DESCRIPTION "Monadic error-handling library"
     HOMEPAGE_URL "https://github.com/dportin/varerr"
     SPDX_LICENSE "MIT"
     LANGUAGES CXX
@@ -28,14 +28,14 @@ option(${PROJECT_NAME}_TESTING "Generate test targets" "${PROJECT_IS_TOP_LEVEL}"
 
 option(${PROJECT_NAME}_DEVELOPMENT "Enable strict build policies" "${PROJECT_IS_TOP_LEVEL}")
 
-# Enable Clang-Tidy test targets.
+# Conditionally enable Clang-Tidy test targets.
 
 cmake_dependent_option(
     ${PROJECT_NAME}_TESTING_CLANG_TIDY "Generate Clang-Tidy test targets" OFF
     "${PROJECT_NAME}_TESTING" OFF
 )
 
-# Enable IWYU test targets.
+# Conditionally enable IWYU test targets.
 
 cmake_dependent_option(
     ${PROJECT_NAME}_TESTING_IWYU "Generate IWYU test targets" OFF

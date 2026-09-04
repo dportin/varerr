@@ -340,7 +340,7 @@ struct BasicResult final {
 
         static_assert(is_result_impl_v<InvokeF>, "and_then: F must return a BasicResult");
         static_assert(std::same_as<result_universe_t<InvokeF>, M>, "and_then: F must preserve the universe M");
-        static_assert(is_normalized_row_v<M, result_row_t<InvokeF>>, "and_then: F must return a normalized error row");
+        static_assert(IsNormalizedRow<M, result_row_t<InvokeF>>, "and_then: F must return a normalized error row");
 
         using ErrRowF = row_union_normalized_t<M, Row<Es...>, result_row_t<InvokeF>>;
         using StatusF = detail::basic_status_row_adapter_t<M, ErrRowF>;
@@ -421,9 +421,9 @@ struct BasicResult final {
         // NOLINTNEXTLINE(cppcoreguidelines-missing-std-forward)
         return std::forward<Self>(self).status().visit([&]<typename F>(F&& f) -> ResultH {
             if constexpr (row_elem_normalized_v<M, std::remove_cvref_t<F>, HandledH>) {
-                return ResultH(std::invoke(std::forward<H>(h), std::forward_like<Self>(f)));
+                return ResultH(std::invoke(std::forward<H>(h), std::forward<F>(f)));
             } else {
-                return ResultH(std::unexpect, StatusH(std::in_place_type<std::remove_cvref_t<F>>, std::forward_like<Self>(f)));
+                return ResultH(std::unexpect, StatusH(std::in_place_type<std::remove_cvref_t<F>>, std::forward<F>(f)));
             }
         });
 
@@ -435,14 +435,10 @@ struct BasicResult final {
     using ErrorType = BasicStatus<M, Es...>;
     using ResultType = std::expected<ValueType, ErrorType>;
 
-    [[nodiscard]] const ErrorType& status() const & {
-        assert(this->has_error());
-        return this->result_.error();
-    }
-
-    [[nodiscard]] ErrorType& status() & {
-        assert(this->has_error());
-        return this->result_.error();
+    template <typename Self>
+    [[nodiscard]] constexpr decltype(auto) status(this Self&& self) noexcept {
+        assert(self.has_error());
+        return std::forward<Self>(self).result_.error();
     }
 
     // Construct a BasicResult from a std::expected.

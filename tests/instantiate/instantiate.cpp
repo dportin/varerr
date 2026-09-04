@@ -18,8 +18,8 @@ int main(void) {
 
     // Instantiate varerr::detail::Status
 
-    const auto status0 = varerr::Status<Universe, E<0>> { std::in_place_type<E<0>>, std::size_t {42} };
-    const auto status1 = varerr::Status<Universe, E<0>, E<1>> { std::in_place_type<E<1>>, std::size_t {42} };
+    const auto status0 = varerr::Status<UniverseE, E<0>> { std::in_place_type<E<0>>, std::size_t {42} };
+    const auto status1 = varerr::Status<UniverseE, E<0>, E<1>> { std::in_place_type<E<1>>, std::size_t {42} };
     const bool check_status = status0.get_if<E<0>>()->value() == status1.get_if<E<1>>()->value();;
 
     // Instantiate varerr::Error
@@ -30,8 +30,8 @@ int main(void) {
 
     // Instantiate varerr::detail::Result
 
-    const auto result0 = varerr::Result<Universe, int, E<0>> { varerr::Error<E<0>> { E<0> {42} } };
-    const auto result1 = varerr::Result<Universe, int, E<0>, E<1>> { varerr::Error<E<1>> { E<1> {42} } };
+    const auto result0 = varerr::Result<UniverseE, int, E<0>> { varerr::Error<E<0>> { E<0> {42} } };
+    const auto result1 = varerr::Result<UniverseE, int, E<0>, E<1>> { varerr::Error<E<1>> { E<1> {42} } };
     const bool check_result = result0.error<E<0>>().value() == result1.error<E<1>>().value();
 
     return check_storage && check_status && check_error && check_result;

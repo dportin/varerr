@@ -5,7 +5,7 @@ Experimental error-handling library.
 ## Dependencies
 
 - The headers require a compiler with C++23 language support.
-- The `-dev` presets require a generator that can emit `compile_commands.json` .
+- The `-dev` presets require a generator that can emit `compile_commands.json`.
 
 ## Quick Start
 
@@ -32,11 +32,15 @@ Clang-Tidy is enabled for all configurations. IWYU is enabled only for Clang con
 
 ## TODO
 
-- Tests for `storage_get`, `storage_activate` and `storage_emplace` primitives.
-- Consider throwing when `rank_v<R, E> == rank_v<R, F>` but `!std::same_as<E, F>` when normalizing rows.
-- Hide everything in `status.hpp` except `IsRankedPack` (`IsErrorRow`) and `IsTriviallyStorable`.
-- Consider providing a static factory method to in-place construct the error branch of BasicResult.
-- Missing uniqueness/de-duplication coverage for `row_normalize_t`.
-- Simplify some compile-time functions with `constexpr_for` (`test_algebra.cpp`).
+- Simplify compile-time functions with `iterate_index_sequence` and friends.
+- Simplify lifting operations with `pack_apply`.
+- Consider throwing when the rank function is not injective.
+- Give traits and concepts in public interface more meaningful names.
+- Give a static factory method to in-place construct the error branch of `BasicResult`.
+- The `BasicStatus` discriminant should depend on the row size (`std::uint8_t` for small rows).
+- Move pack indexing selection in `algebra.hpp` to a utility header and permit selection of implementation with a preprocessor define.
 
-- Names in test cases (currently just prints tuple index).
+
+## License
+
+This project is licensed under the [MIT](LICENSE) license.

@@ -25,6 +25,41 @@
 // Normalization and merge operations currently resolve rank collisions by pos-
 // ition. The manner in which rank collisions are resolved is not guaranteed.
 
+// Define VARERR_PACK_SUBSCRIPT_IMPL before including this header to select the
+// pack subscripting implementation. Falls back to recursive implementation if
+// the compiler does not support pack indexing or provide a pack indexing built-
+// in (MSVC, AppleClang). Translation units may differ in their selection of im-
+// plementation since every alternative names the same type.
+
+#define VARERR_PACK_SUBSCRIPT_INDEX 1
+#define VARERR_PACK_SUBSCRIPT_BUILTIN 2
+#define VARERR_PACK_SUBSCRIPT_FALLBACK 3
+
+#if !defined(VARERR_PACK_SUBSCRIPT_IMPL)
+
+// MSVC reports the language in _MSVC_LANG unless /Zc:__cplusplus is set.
+
+#if defined(_MSVC_LANG)
+#define VARERR_LANG _MSVC_LANG
+#else
+#define VARERR_LANG __cplusplus
+#endif
+
+#if defined(__cpp_pack_indexing) && __cpp_pack_indexing >= 202311L && VARERR_LANG > 202302L
+#define VARERR_PACK_SUBSCRIPT_IMPL VARERR_PACK_SUBSCRIPT_INDEX
+#elif defined(__has_builtin)
+    #if __has_builtin(__type_pack_element)
+    #define VARERR_PACK_SUBSCRIPT_IMPL VARERR_PACK_SUBSCRIPT_BUILTIN
+    #else
+    #define VARERR_PACK_SUBSCRIPT_IMPL VARERR_PACK_SUBSCRIPT_FALLBACK
+    #endif
+#else
+#define VARERR_PACK_SUBSCRIPT_IMPL VARERR_PACK_SUBSCRIPT_FALLBACK
+#endif
+
+#undef VARERR_LANG
+#endif
+
 namespace varerr {
 
 // Determine whether a type E is ranked relative to a universe M.
@@ -284,9 +319,7 @@ requires IsRankedPack<M, Es...>
 
 }
 
-// Index into a parameter pack. Falls back to pack_subscript_recursive if the
-// compiler does not support pack indexing at the specified language revision
-// or provide a pack indexing builtin (MSVC, AppleClang).
+// Index into a parameter pack.
 
 template <std::size_t I, typename... Ts>
 struct pack_subscript_recursive;
@@ -297,34 +330,18 @@ struct pack_subscript_recursive<0, T, Ts...> : std::type_identity<T> {};
 template <std::size_t I, typename T, typename... Ts>
 struct pack_subscript_recursive<I, T, Ts...> : pack_subscript_recursive<I - 1, Ts...> {};
 
-#if defined(__has_builtin)
-#define VARERR_HAS_BUILTIN(x) __has_builtin(x)
-#else
-#define VARERR_HAS_BUILTIN(x) 0
-#endif
-
-// MSVC reports the language revision in _MSVC_LANG unless /Zc:__cplusplus is
-// set.
-
-#if defined(_MSVC_LANG)
-#define VARERR_LANGUAGE _MSVC_LANG
-#else
-#define VARERR_LANGUAGE __cplusplus
-#endif
-
-#if defined(__cpp_pack_indexing) && __cpp_pack_indexing >= 202311L && VARERR_LANGUAGE > 202302L
+#if VARERR_PACK_SUBSCRIPT_IMPL == VARERR_PACK_SUBSCRIPT_INDEX
 template <std::size_t I, typename... Ts>
 using pack_subscript_impl_t = Ts...[I];
-#elif VARERR_HAS_BUILTIN(__type_pack_element)
+#elif VARERR_PACK_SUBSCRIPT_IMPL == VARERR_PACK_SUBSCRIPT_BUILTIN
 template <std::size_t I, typename... Ts>
 using pack_subscript_impl_t = __type_pack_element<I, Ts...>;
-#else
+#elif VARERR_PACK_SUBSCRIPT_IMPL == VARERR_PACK_SUBSCRIPT_FALLBACK
 template <std::size_t I, typename... Ts>
 using pack_subscript_impl_t = pack_subscript_recursive<I, Ts...>::type;
+#else
+#error "VARERR_PACK_SUBSCRIPT_IMPL not recognized"
 #endif
-
-#undef VARERR_LANGUAGE
-#undef VARERR_HAS_BUILTIN
 
 template <std::size_t I, typename... Ts>
 struct pack_subscript : std::type_identity<pack_subscript_impl_t<I, Ts...>> {};

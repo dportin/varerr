@@ -72,6 +72,37 @@ static_assert(std::same_as<UniverseE::template unrank<UniverseE::template rank<E
 static_assert(std::same_as<UniverseE::template unrank<UniverseE::template rank<E<1>>>, E<1>>);
 static_assert(std::same_as<UniverseE::template unrank<UniverseE::template rank<E<2>>>, E<2>>);
 
+// The homogeneous universe with a rank function that differentiates const and
+// non-const elements.
+
+template <typename T>
+using decay_const_t = std::remove_volatile_t<std::remove_reference_t<T>>;
+
+struct ConstUniverseE {
+
+    template <typename T>
+    struct rank_trait;
+
+    template <std::size_t N>
+    struct rank_trait<E<N>> : std::integral_constant<std::size_t, 2 * N> {};
+
+    template <std::size_t N>
+    struct rank_trait<const E<N>> : std::integral_constant<std::size_t, 2 * N + 1> {};
+
+    template <typename T>
+    requires requires { rank_trait<decay_const_t<T>>::value; }
+    static constexpr std::size_t rank = rank_trait<decay_const_t<T>>::value;
+
+    template <std::size_t Z>
+    using unrank = std::conditional_t<Z % 2 == 0, std::type_identity<E<Z / 2>>, std::type_identity<const E<Z / 2>>>::type;
+
+};
+
+static_assert(std::same_as<ConstUniverseE::template unrank<ConstUniverseE::template rank<E<0>>>, E<0>>);
+static_assert(std::same_as<ConstUniverseE::template unrank<ConstUniverseE::template rank<const E<0>>>, const E<0>>);
+static_assert(std::same_as<ConstUniverseE::template unrank<ConstUniverseE::template rank<E<1>>>, E<1>>);
+static_assert(std::same_as<ConstUniverseE::template unrank<ConstUniverseE::template rank<const E<1>>>, const E<1>>);
+
 // Heterogeneous universe of trivially storable types parameterized by payload
 // size and log-alignment.
 

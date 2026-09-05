@@ -22,11 +22,8 @@
 // tic member template of a universe class that parameterizes the row operations
 // in this header.
 
-// Normalization and merge operations resolve rank collisions by position: row
-// normalization retains the first occurrence in the pack; merge operations re-
-// tain the leftmost occurrence in the rows. The membership, subset and equal-
-// ity operations resolve element membership and equivalence by rank; thus two
-// rows may compare equal without being structurally equal.
+// Normalization and merge operations currently resolve rank collisions by pos-
+// ition. The manner in which rank collisions are resolved is not guaranteed.
 
 namespace varerr {
 
@@ -352,7 +349,7 @@ template <typename M, typename... Es>
 requires IsRankedPack<M, Es...>
 struct pack_normalize {
 
-    // pack_normalize<M, Es...>()::type is Row<Fs...> where Fs... is a subset of
+    // pack_normalize<M, Es...>::type is Row<Fs...> where Fs... is a subset of
     // Es... that is sorted and unique with respect to M::rank.
 
     static constexpr auto result = pack_normalize_indices<M>(Row<Es...> {});

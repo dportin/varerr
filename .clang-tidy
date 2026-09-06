@@ -18,6 +18,7 @@ Checks: >
   -zircon-*,
 
   -bugprone-easily-swappable-parameters,
+  -cppcoreguidelines-macro-usage,
   -cppcoreguidelines-non-private-member-variables-in-classes,
   -misc-no-recursion,
   -misc-non-private-member-variables-in-classes,
@@ -35,6 +36,7 @@ Checks: >
   -readability-named-parameter,
   -readability-redundant-member-init,
   -readability-redundant-typename,
+  -readability-use-concise-preprocessor-directives,
 
   -cppcoreguidelines-pro-bounds-avoid-unchecked-container-access,
   -cppcoreguidelines-pro-bounds-constant-array-index,

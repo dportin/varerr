@@ -1,10 +1,10 @@
 include(Catch)
 
-
 # Generate Catch2 targets.
 
 add_executable(${PROJECT_NAME}_tests_main
     "test_main.cpp"
+    "test_storage.cpp"
     "test_algebra.cpp"
 )
 
@@ -15,6 +15,14 @@ target_link_libraries(${PROJECT_NAME}_tests_main PRIVATE
 )
 
 catch_discover_tests(${PROJECT_NAME}_tests_main)
+
+# Ensure header-isolation tests run in test suite.
+
+add_test(NAME ${PROJECT_NAME}_tests_verify_header_isolation
+    COMMAND "${CMAKE_COMMAND}"
+    --build "${CMAKE_BINARY_DIR}"
+    --target ${PROJECT_NAME}_header_only_verify_interface_header_sets
+)
 
 # Instantiate headers in object file to generate compilation database.
 
@@ -60,7 +68,7 @@ if(${PROJECT_NAME}_TESTING AND ${PROJECT_NAME}_TESTING_CLANG_TIDY)
         --warnings-as-errors=*
         --extra-arg-before=-Wno-unknown-warning-option
         --extra-arg-before=-Wno-unused-command-line-argument
-        "--header-filter=${PROJECT_NAME}/"
+        "--header-filter=(^|/)include/${PROJECT_NAME}/[^/]*\\.hpp$"
         --config-file "${${PROJECT_NAME}_SOURCE_DIR}/.clang-tidy"
         -p "${CMAKE_BINARY_DIR}"
         "${CMAKE_CURRENT_LIST_DIR}/instantiate/instantiate.cpp"

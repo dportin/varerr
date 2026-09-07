@@ -38,7 +38,10 @@ template <typename F, std::size_t N>
 inline constexpr bool is_nothrow_invocable_upto_index_v =
     is_nothrow_invocable_over_index_sequence_v<F, std::make_index_sequence<N>>;
 
-// Naive implementation of compile-time switch over indices.
+// Dispatch a function with the index of the active alternative. Consider using
+// a binary search or jump table when the number of alternatives is large to im-
+// prove performance. The current implementation simulates a jump table using a
+// compile-time unrolled conditional chain.
 
 template <std::size_t N, typename F>
 requires (N > 0)
@@ -49,10 +52,10 @@ noexcept(is_nothrow_invocable_upto_index_v<F, N>) {
 
     return [&]<std::size_t I>(this auto&& self) -> decltype(auto) {
         if constexpr (I + 1 == N) {
-            return std::forward<F>(f)(std::integral_constant<std::size_t, I>{});
+            return std::forward<F>(f)(std::integral_constant<std::size_t, I> {});
         } else {
             if (n == I) {
-                return std::forward<F>(f)(std::integral_constant<std::size_t, I>{});
+                return std::forward<F>(f)(std::integral_constant<std::size_t, I> {});
             } else {
                 return self.template operator()<I + 1>();
             }
@@ -113,13 +116,14 @@ consteval auto status_discriminator_impl() {
 template <std::size_t N>
 using status_discriminator_t = decltype(detail::status_discriminator_impl<N>())::type;
 
-template <typename R, IsTriviallyStorable... Es>
-requires IsNormalizedPack<R, Es...>
+template <typename M, IsTriviallyStorable... Es>
+requires IsNormalizedPack<M, Es...>
 struct BasicStatus final {
 
-    // The status class inherits trivial copyability and destructibility from
-    // the storage class. The remaining class invariants ensure that the copy
-    // and move constructors are unconditionally noexcept.
+    // This class inherits trivial copyability and destructibility from its sto-
+    // rage. The sizeof invariant is unreachable but retained for documentation.
+    // The remaining class invariants ensure that the copy and move constructors
+    // are unconditionally noexcept.
 
     static_assert(sizeof...(Es) > 0,
         "BasicStatus<M, Es...>: alternatives must be non-empty");
@@ -139,12 +143,12 @@ struct BasicStatus final {
     // Construct a BasicStatus from an alternative.
 
     template <typename E, typename... Args>
-    requires row_elem_normalized_v<R, E, Row<Es...>> &&
+    requires row_elem_normalized_v<M, E, Row<Es...>> &&
              std::constructible_from<E, Args...>
     constexpr explicit BasicStatus(std::in_place_type_t<E>, Args&&... args)
     noexcept(std::is_nothrow_constructible_v<E, Args...>) :
-        discrim_ { static_cast<DiscrimType>(row_index_normalized_v<R, E, Row<Es...>>) },
-        storage_ { std::in_place_index<row_index_normalized_v<R, E, Row<Es...>>>, std::forward<Args>(args)... } {}
+        discrim_ { static_cast<DiscrimType>(row_index_normalized_v<M, E, Row<Es...>>) },
+        storage_ { std::in_place_index<row_index_normalized_v<M, E, Row<Es...>>>, std::forward<Args>(args)... } {}
 
     // TODO: Remove the forwarding constructor (which exists primarily to enab-
     // le the BasicResult(Error<E>&&) and BasicResult(const Error<E>&) construct-
@@ -152,7 +156,7 @@ struct BasicStatus final {
     // and at most wrong - when E is the BasicStatus type itself.
 
     template <typename E>
-    requires row_elem_normalized_v<R, std::remove_cvref_t<E>, Row<Es...>>
+    requires row_elem_normalized_v<M, std::remove_cvref_t<E>, Row<Es...>>
     constexpr BasicStatus(E&& e)
     noexcept(std::is_nothrow_constructible_v<std::remove_cvref_t<E>, E>) :
         BasicStatus(std::in_place_type<std::remove_cvref_t<E>>, std::forward<E>(e)) {}
@@ -165,13 +169,13 @@ struct BasicStatus final {
     // is unconditionally noexcept.
 
     template <IsTriviallyStorable... Fs>
-    requires IsNormalizedPack<R, Fs...> &&
-             row_proper_subset_normalized_v<R, Row<Fs...>, Row<Es...>>
-    constexpr BasicStatus(const BasicStatus<R, Fs...>& other) noexcept {
+    requires IsNormalizedPack<M, Fs...> &&
+             row_proper_subset_normalized_v<M, Row<Fs...>, Row<Es...>>
+    constexpr BasicStatus(const BasicStatus<M, Fs...>& other) noexcept {
         other.visit([this]<typename E>(const E& e) -> void {
-            constexpr std::size_t I = row_index_normalized_v<R, E, Row<Es...>>;
+            constexpr std::size_t I = row_index_normalized_v<M, E, Row<Es...>>;
             this->discrim_ = static_cast<DiscrimType>(I);
-            storage_emplace<I>(this->storage_, e);
+            detail::storage_emplace<I>(this->storage_, e);
         });
     }
 
@@ -179,9 +183,9 @@ struct BasicStatus final {
 
     template <typename E, typename Self>
     constexpr transfer_const_t<Self, E>* get_if(this Self& self) noexcept  {
-        if constexpr (row_elem_normalized_v<R, E, Row<Es...>>) {
+        if constexpr (row_elem_normalized_v<M, E, Row<Es...>>) {
             if (self.template holds<E>()) {
-                return std::addressof(storage_get<row_index_normalized_v<R, E, Row<Es...>>>(self.storage_));
+                return std::addressof(detail::storage_get<row_index_normalized_v<M, E, Row<Es...>>>(self.storage_));
             } else {
                 return nullptr;
             }
@@ -198,7 +202,7 @@ struct BasicStatus final {
         return detail::dispatch<sizeof...(Es)>(
             self.discrim_,
             [&]<std::size_t I>(std::integral_constant<std::size_t, I>) -> decltype(auto) {
-                return std::forward<F>(f)(storage_get<I>(std::forward<Self>(self).storage_));
+                return std::forward<F>(f)(detail::storage_get<I>(std::forward<Self>(self).storage_));
             }
         );
     }
@@ -207,8 +211,8 @@ struct BasicStatus final {
 
     template <typename E>
     [[nodiscard]] constexpr bool holds() const noexcept {
-        if constexpr (row_elem_normalized_v<R, E, Row<Es...>>) {
-            return this->discrim_ == static_cast<DiscrimType>(row_index_normalized_v<R, E, Row<Es...>>);
+        if constexpr (row_elem_normalized_v<M, E, Row<Es...>>) {
+            return this->discrim_ == static_cast<DiscrimType>(row_index_normalized_v<M, E, Row<Es...>>);
         } else {
             return false;
         }
@@ -224,13 +228,13 @@ struct BasicStatus final {
 
 };
 
-template <typename R>
-struct BasicStatus<R> final {
+template <typename M>
+struct BasicStatus<M> final {
 
-    // BasicStatus<R> is uninhabited: no value of this type should exist because
-    // the empty row has no alternatives. The copy and move constructors are de-
-    // faulted only because std::expected expects copy constructibility. The no-
-    // except specifications are for documentary purposes.
+    // The BasicStatus<R> specialization is uninhabited. No value of this type
+    // exists because the empty row has no alternatives. The copy and move con-
+    // structors are defined only because std::expected requires copy construc-
+    // tibility. The noexcept specifications are only for documentary purposes.
 
     BasicStatus() = delete;
 

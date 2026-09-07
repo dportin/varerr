@@ -7,37 +7,44 @@
 #include <concepts>
 #include <cassert>
 #include <cstddef>
+#include <cstdint>
+#include <limits>
 #include <memory>
 #include <type_traits>
 #include <utility>
 
-// This file implements the variadic error type which forms the unexpected
-// branch of the main result type.
+
+// This file implements the variadic error type which forms the unexpected bran-
+// ch of the main result type. The status type inherits trivial copyability and
+// destructibility from its backing storage. It further requires that the alter-
+// natives be nothrow copy and move constructible to guarantee that its copy and
+// move constructors are unconditionally noexcept.
 
 namespace varerr {
 
 namespace detail {
 
-template <typename F, typename Seq>
-inline constexpr bool is_nothrow_invocable_over_sequence_v = false;
+// Determine whether a function is nothrow invocable over an index sequence.
+
+template <typename F, typename Is>
+inline constexpr bool is_nothrow_invocable_over_index_sequence_v = false;
 
 template <typename F, std::size_t... Is>
-inline constexpr bool is_nothrow_invocable_over_sequence_v<F, std::index_sequence<Is...>> =
+inline constexpr bool is_nothrow_invocable_over_index_sequence_v<F, std::index_sequence<Is...>> =
     (std::is_nothrow_invocable_v<F, std::integral_constant<std::size_t, Is>> && ...);
 
 template <typename F, std::size_t N>
-inline constexpr bool is_nothrow_invocable_over_index_sequence_v =
-    is_nothrow_invocable_over_sequence_v<F, std::make_index_sequence<N>>;
+inline constexpr bool is_nothrow_invocable_upto_index_v =
+    is_nothrow_invocable_over_index_sequence_v<F, std::make_index_sequence<N>>;
 
-// Naive implementation of compile-time switch over indices. Consider replacing
-// with jump table.
+// Naive implementation of compile-time switch over indices.
 
 template <std::size_t N, typename F>
 requires (N > 0)
 [[nodiscard]] constexpr decltype(auto) dispatch_linear_dense(std::size_t n, F&& f)
-noexcept(is_nothrow_invocable_over_index_sequence_v<F, N>) {
+noexcept(is_nothrow_invocable_upto_index_v<F, N>) {
 
-    assert(n < N); /* precondition */
+    assert(n < N);
 
     return [&]<std::size_t I>(this auto&& self) -> decltype(auto) {
         if constexpr (I + 1 == N) {
@@ -55,19 +62,16 @@ noexcept(is_nothrow_invocable_over_index_sequence_v<F, N>) {
 template <std::size_t N, typename F>
 requires (N > 0)
 [[nodiscard]] constexpr decltype(auto) dispatch(std::size_t n, F&& f)
-noexcept(is_nothrow_invocable_over_index_sequence_v<F, N>) {
+noexcept(is_nothrow_invocable_upto_index_v<F, N>) {
     return dispatch_linear_dense<N>(n, std::forward<F>(f));
 }
 
 } // namespace detail
 
-// template <typename F, typename Self, typename... Es>
-// inline constexpr bool is_nothrow_visitable_v =
-//     (std::is_nothrow_invocable_v<F, decltype(std::forward_like<Self>(std::declval<Es&>()))> && ...);
-
-// More conservative than necessary but easier to reason about. The loss of pre-
-// cision matters only for visitors that are nothrow-invocable for some but not
-// all qualifications of a trivially copyable argument.
+// Determine whether a function is nothrow invocable for every cref-qualified
+// version of its argument. This is more conservative than necessary but the
+// loss of precision matters only for visitors that are nothrow invocable for
+// some but not all cref-qualifications of a trivially copyable argument.
 
 template <typename F, typename... Es>
 inline constexpr bool is_nothrow_visitable_v =
@@ -79,13 +83,45 @@ inline constexpr bool is_nothrow_visitable_v =
 template <typename Self, typename T>
 using const_preserving_pointer_t = std::conditional_t<std::is_const_v<std::remove_reference_t<Self>>, const T*, T*>;
 
+// Determine the smallest unsigned integral type that discriminates between N
+// alternatives. The returned std::uint_leastN_t are unconditionally present.
+
+namespace detail {
+
+template <std::size_t N>
+consteval auto status_discriminator_impl() {
+
+    static constexpr std::size_t K = N > 0 ? N - 1 : 0;
+
+    static_assert(K <= std::numeric_limits<std::uint_least64_t>::max(),
+        "status_discriminator: number of alterantives not representable");
+
+    if constexpr (K <= std::numeric_limits<std::uint_least8_t>::max()) {
+        return std::type_identity<std::uint_least8_t> {};
+    } else if constexpr (K <= std::numeric_limits<std::uint_least16_t>::max()) {
+        return std::type_identity<std::uint_least16_t> {};
+    } else if constexpr (K <= std::numeric_limits<std::uint_least32_t>::max()) {
+        return std::type_identity<std::uint_least32_t> {};
+    } else if constexpr (K <= std::numeric_limits<std::uint_least64_t>::max()) {
+        return std::type_identity<std::uint_least64_t> {};
+    } else {
+        std::unreachable();
+    }
+
+}
+
+} // namespace detail
+
+template <std::size_t N>
+using status_discriminator_t = decltype(detail::status_discriminator_impl<N>())::type;
+
 template <typename R, IsTriviallyStorable... Es>
 requires IsNormalizedPack<R, Es...>
 struct BasicStatus final {
 
     // The status class inherits trivial copyability and destructibility from
-    // the storage class. The remaining class invariants must be satisfied for
-    // the copy and move constructors to be unconditionally noexcept.
+    // the storage class. The remaining class invariants ensure that the copy
+    // and move constructors are unconditionally noexcept.
 
     static_assert(sizeof...(Es) > 0,
         "BasicStatus<M, Es...>: alternatives must be non-empty");
@@ -102,6 +138,7 @@ struct BasicStatus final {
     static_assert((std::is_nothrow_move_constructible_v<Es> && ...),
         "BasicStatus<M, Es...>: alternatives must be nothrow move-constructible");
 
+
     // Construct a BasicStatus from an alternative.
 
     template <typename E, typename... Args>
@@ -109,8 +146,8 @@ struct BasicStatus final {
              std::constructible_from<E, Args...>
     constexpr explicit BasicStatus(std::in_place_type_t<E>, Args&&... args)
     noexcept(std::is_nothrow_constructible_v<E, Args...>) :
-        active_(row_index_normalized_v<R, E, Row<Es...>>),
-        alternatives_(std::in_place_index<row_index_normalized_v<R, E, Row<Es...>>>, std::forward<Args>(args)...) {}
+        active_ { row_index_normalized_v<R, E, Row<Es...>> },
+        alternatives_ { std::in_place_index<row_index_normalized_v<R, E, Row<Es...>>>, std::forward<Args>(args)... } {}
 
     // TODO: Remove the forwarding constructor (which exists primarily to enab-
     // le the BasicResult(Error<E>&&) and BasicResult(const Error<E>&) construct-
@@ -123,23 +160,25 @@ struct BasicStatus final {
     noexcept(std::is_nothrow_constructible_v<std::remove_cvref_t<E>, E>) :
         BasicStatus(std::in_place_type<std::remove_cvref_t<E>>, std::forward<E>(e)) {}
 
-    // Implicit widening constructor (row subsumption).
+    // The widening constructor deliberately leaves the class members uninitial-
+    // ized before invoking the visitor. P1331R2 permits uninitialized class me-
+    // mbers in constexpr contexts provided that the uninitialized class members
+    // are not read. The visitor writes each member once before it returns. Note
+    // that [alternatives_] is default-initialized by Storage(). The constructor
+    // is unconditionally noexcept.
 
     template <IsTriviallyStorable... Fs>
     requires IsNormalizedPack<R, Fs...> &&
-            row_proper_subset_normalized_v<R, Row<Fs...>, Row<Es...>>
-    constexpr BasicStatus(const BasicStatus<R, Fs...>& other) noexcept /* triviality */ :
-        active_{}, alternatives_{} /* dead initialization */ {
-
+             row_proper_subset_normalized_v<R, Row<Fs...>, Row<Es...>>
+    constexpr BasicStatus(const BasicStatus<R, Fs...>& other) noexcept {
         other.visit([this]<typename E>(const E& e) -> void {
             constexpr std::size_t I = row_index_normalized_v<R, E, Row<Es...>>;
             this->active_ = I;
             storage_emplace<I>(this->alternatives_, e);
         });
-
     }
 
-    // Return pointer to underlying storage by type.
+    // Return a pointer to the underlying storage by alternative.
 
     template <typename E, typename Self>
     constexpr const_preserving_pointer_t<Self, E> get_if(this Self& self) noexcept  {
@@ -154,8 +193,7 @@ struct BasicStatus final {
         }
     }
 
-    // Dispatch visitor to active member by index.
-
+    // Dispatch a visitor to the active member by index.
 
     template <typename Self, typename F>
     constexpr decltype(auto) visit(this Self&& self, F&& f)
@@ -169,7 +207,7 @@ struct BasicStatus final {
         );
     }
 
-    // Determine which alternative is active.
+    // Determine whether an alternative is active.
 
     template <typename E>
     [[nodiscard]] constexpr bool holds() const noexcept {

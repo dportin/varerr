@@ -39,6 +39,7 @@ Clang-Tidy is enabled for all configurations. IWYU is enabled only for Clang con
 - Provide a static factory method to in-place construct the error branch of `BasicResult`.
 - The `BasicStatus` discriminant should depend on the row size (`std::uint8_t` for small rows).
 - Consider testing sparsely-ranked rows in `test_algebra.cpp`.
+- Consider selecting jump table or binary dispatch implementation if number of alternatives is large.
 
 ## License
 

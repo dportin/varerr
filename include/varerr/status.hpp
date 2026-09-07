@@ -182,7 +182,7 @@ struct BasicStatus final {
     // Return a pointer to the underlying storage by alternative.
 
     template <typename E, typename Self>
-    constexpr transfer_const_t<Self, E>* get_if(this Self& self) noexcept  {
+    [[nodiscard]] constexpr transfer_const_t<Self, E>* get_if(this Self& self) noexcept  {
         if constexpr (row_elem_normalized_v<M, E, Row<Es...>>) {
             if (self.template holds<E>()) {
                 return std::addressof(detail::storage_get<row_index_normalized_v<M, E, Row<Es...>>>(self.storage_));
@@ -250,8 +250,6 @@ struct BasicStatus<M> final {
 
 namespace detail {
 
-// Unpack a Row into a BasicStatus.
-
 template <typename M, typename U>
 struct basic_status_row_adapter;
 
@@ -261,15 +259,15 @@ struct basic_status_row_adapter<M, Row<Es...>> : std::type_identity<BasicStatus<
 
 template <typename M, typename U>
 requires IsNormalizedRow<M, U>
-using basic_status_row_adapter_t = typename basic_status_row_adapter<M, U>::type;
+using basic_status_row_adapter_t = basic_status_row_adapter<M, U>::type;
 
 } // namespace detail
 
-// Normalizing constructor for BasicStatus.
+// Construct a BasicStatus from a Row.
 
-template <typename R, IsTriviallyStorable... Es>
-requires IsRankedPack<R, Es...>
-using Status = detail::basic_status_row_adapter_t<R, pack_normalize_t<R, Es...>>;
+template <typename M, IsTriviallyStorable... Es>
+requires IsRankedPack<M, Es...>
+using Status = detail::basic_status_row_adapter_t<M, pack_normalize_t<M, Es...>>;
 
 } // namespace varerr
 

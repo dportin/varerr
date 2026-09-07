@@ -91,10 +91,10 @@ namespace detail {
 template <std::size_t N>
 consteval auto status_discriminator_impl() {
 
-    static constexpr std::size_t K = N > 0 ? N - 1 : 0;
+    constexpr std::size_t K = N > 0 ? N - 1 : 0;
 
     static_assert(K <= std::numeric_limits<std::uint_least64_t>::max(),
-        "status_discriminator: number of alterantives not representable");
+        "status_discriminator: number of alternatives not representable in std::uint_least64_t");
 
     if constexpr (K <= std::numeric_limits<std::uint_least8_t>::max()) {
         return std::type_identity<std::uint_least8_t> {};
@@ -138,7 +138,6 @@ struct BasicStatus final {
     static_assert((std::is_nothrow_move_constructible_v<Es> && ...),
         "BasicStatus<M, Es...>: alternatives must be nothrow move-constructible");
 
-
     // Construct a BasicStatus from an alternative.
 
     template <typename E, typename... Args>
@@ -146,8 +145,8 @@ struct BasicStatus final {
              std::constructible_from<E, Args...>
     constexpr explicit BasicStatus(std::in_place_type_t<E>, Args&&... args)
     noexcept(std::is_nothrow_constructible_v<E, Args...>) :
-        active_ { row_index_normalized_v<R, E, Row<Es...>> },
-        alternatives_ { std::in_place_index<row_index_normalized_v<R, E, Row<Es...>>>, std::forward<Args>(args)... } {}
+        discrim_ { static_cast<DiscrimType>(row_index_normalized_v<R, E, Row<Es...>>) },
+        storage_ { std::in_place_index<row_index_normalized_v<R, E, Row<Es...>>>, std::forward<Args>(args)... } {}
 
     // TODO: Remove the forwarding constructor (which exists primarily to enab-
     // le the BasicResult(Error<E>&&) and BasicResult(const Error<E>&) construct-
@@ -164,7 +163,7 @@ struct BasicStatus final {
     // ized before invoking the visitor. P1331R2 permits uninitialized class me-
     // mbers in constexpr contexts provided that the uninitialized class members
     // are not read. The visitor writes each member once before it returns. Note
-    // that [alternatives_] is default-initialized by Storage(). The constructor
+    // that the alternatives are default-initialized regardless. The constructor
     // is unconditionally noexcept.
 
     template <IsTriviallyStorable... Fs>
@@ -173,8 +172,8 @@ struct BasicStatus final {
     constexpr BasicStatus(const BasicStatus<R, Fs...>& other) noexcept {
         other.visit([this]<typename E>(const E& e) -> void {
             constexpr std::size_t I = row_index_normalized_v<R, E, Row<Es...>>;
-            this->active_ = I;
-            storage_emplace<I>(this->alternatives_, e);
+            this->discrim_ = static_cast<DiscrimType>(I);
+            storage_emplace<I>(this->storage_, e);
         });
     }
 
@@ -184,7 +183,7 @@ struct BasicStatus final {
     constexpr const_preserving_pointer_t<Self, E> get_if(this Self& self) noexcept  {
         if constexpr (row_elem_normalized_v<R, E, Row<Es...>>) {
             if (self.template holds<E>()) {
-                return std::addressof(storage_get<row_index_normalized_v<R, E, Row<Es...>>>(self.alternatives_));
+                return std::addressof(storage_get<row_index_normalized_v<R, E, Row<Es...>>>(self.storage_));
             } else {
                 return nullptr;
             }
@@ -198,11 +197,10 @@ struct BasicStatus final {
     template <typename Self, typename F>
     constexpr decltype(auto) visit(this Self&& self, F&& f)
     noexcept(is_nothrow_visitable_v<F, Es...>) {
-    // noexcept((std::is_nothrow_invocable_v<F, decltype(std::forward_like<Self>(std::declval<Es&>()))> && ...)) {
         return detail::dispatch<sizeof...(Es)>(
-            self.active_,
+            self.discrim_,
             [&]<std::size_t I>(std::integral_constant<std::size_t, I>) -> decltype(auto) {
-                return std::forward<F>(f)(storage_get<I>(std::forward<Self>(self).alternatives_));
+                return std::forward<F>(f)(storage_get<I>(std::forward<Self>(self).storage_));
             }
         );
     }
@@ -212,7 +210,7 @@ struct BasicStatus final {
     template <typename E>
     [[nodiscard]] constexpr bool holds() const noexcept {
         if constexpr (row_elem_normalized_v<R, E, Row<Es...>>) {
-            return this->active_ == row_index_normalized_v<R, E, Row<Es...>>;
+            return this->discrim_ == static_cast<DiscrimType>(row_index_normalized_v<R, E, Row<Es...>>);
         } else {
             return false;
         }
@@ -220,11 +218,11 @@ struct BasicStatus final {
 
     private:
 
-    using TagType = std::size_t;
+    using DiscrimType = status_discriminator_t<sizeof...(Es)>;
     using StorageType = detail::Storage<Es...>;
 
-    TagType active_;
-    StorageType alternatives_;
+    DiscrimType discrim_;
+    StorageType storage_;
 
 };
 

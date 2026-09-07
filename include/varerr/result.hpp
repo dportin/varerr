@@ -1,6 +1,7 @@
 #ifndef VARERR_RESULT_HPP
 #define VARERR_RESULT_HPP
 
+#include "utilities.hpp"
 #include "storage.hpp"
 #include "algebra.hpp"
 #include "status.hpp"
@@ -261,7 +262,7 @@ struct BasicResult final {
 
     template <typename Self>
     requires (!std::is_void_v<T>)
-    [[nodiscard]] constexpr const_preserving_pointer_t<Self, T> value_if(this Self& self) noexcept {
+    [[nodiscard]] constexpr transfer_const_t<Self, T>* value_if(this Self& self) noexcept {
         if (self.has_value()) {
             return std::addressof(*self.result_);
         } else {
@@ -280,7 +281,7 @@ struct BasicResult final {
     }
 
     template <typename E, typename Self>
-    [[nodiscard]] constexpr const_preserving_pointer_t<Self, E> error_if(this Self& self) noexcept {
+    [[nodiscard]] constexpr transfer_const_t<Self, E>* error_if(this Self& self) noexcept {
         static_assert(row_elem_normalized_v<M, E, Row<Es...>>);
         return self.status().template get_if<E>();
     }

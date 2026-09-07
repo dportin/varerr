@@ -1,6 +1,7 @@
 #ifndef VARERR_STATUS_HPP
 #define VARERR_STATUS_HPP
 
+#include "utilities.hpp"
 #include "storage.hpp"
 #include "algebra.hpp"
 
@@ -69,9 +70,9 @@ noexcept(is_nothrow_invocable_upto_index_v<F, N>) {
 } // namespace detail
 
 // Determine whether a function is nothrow invocable for every cref-qualified
-// version of its argument. This is more conservative than necessary but the
+// version of its arguments. This is more conservative than necessary but the
 // loss of precision matters only for visitors that are nothrow invocable for
-// some but not all cref-qualifications of a trivially copyable argument.
+// some but not all cref-qualifications of their trivially copyable arguments.
 
 template <typename F, typename... Es>
 inline constexpr bool is_nothrow_visitable_v =
@@ -79,9 +80,6 @@ inline constexpr bool is_nothrow_visitable_v =
     (std::is_nothrow_invocable_v<F, const Es&> && ...) &&
     (std::is_nothrow_invocable_v<F, Es&&> && ...) &&
     (std::is_nothrow_invocable_v<F, const Es&&> && ...);
-
-template <typename Self, typename T>
-using const_preserving_pointer_t = std::conditional_t<std::is_const_v<std::remove_reference_t<Self>>, const T*, T*>;
 
 // Determine the smallest unsigned integral type that discriminates between N
 // alternatives. The returned std::uint_leastN_t are unconditionally present.
@@ -180,7 +178,7 @@ struct BasicStatus final {
     // Return a pointer to the underlying storage by alternative.
 
     template <typename E, typename Self>
-    constexpr const_preserving_pointer_t<Self, E> get_if(this Self& self) noexcept  {
+    constexpr transfer_const_t<Self, E>* get_if(this Self& self) noexcept  {
         if constexpr (row_elem_normalized_v<R, E, Row<Es...>>) {
             if (self.template holds<E>()) {
                 return std::addressof(storage_get<row_index_normalized_v<R, E, Row<Es...>>>(self.storage_));

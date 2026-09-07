@@ -168,6 +168,7 @@ target_sources(${PROJECT_NAME}_header_only
         BASE_DIRS
             "${CMAKE_CURRENT_SOURCE_DIR}/include"
         FILES
+            "${CMAKE_CURRENT_SOURCE_DIR}/include/${PROJECT_NAME}/utilities.hpp"
             "${CMAKE_CURRENT_SOURCE_DIR}/include/${PROJECT_NAME}/storage.hpp"
             "${CMAKE_CURRENT_SOURCE_DIR}/include/${PROJECT_NAME}/algebra.hpp"
             "${CMAKE_CURRENT_SOURCE_DIR}/include/${PROJECT_NAME}/status.hpp"

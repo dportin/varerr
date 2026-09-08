@@ -120,6 +120,14 @@ template <typename M, IsTriviallyStorable... Es>
 requires IsNormalizedPack<M, Es...>
 struct BasicStatus final {
 
+    private:
+
+    using DiscrimType = status_discriminator_t<sizeof...(Es)>;
+    using StorageType = detail::Storage<Es...>;
+    using DefaultType = detail::pack_subscript_t<0, Es...>;
+
+    public:
+
     // This class inherits trivial copyability and destructibility from its sto-
     // rage. The sizeof invariant is unreachable but retained for documentation.
     // The remaining class invariants ensure that the copy and move constructors
@@ -139,6 +147,13 @@ struct BasicStatus final {
 
     static_assert((std::is_nothrow_move_constructible_v<Es> && ...),
         "BasicStatus<M, Es...>: alternatives must be nothrow move-constructible");
+
+
+    constexpr BasicStatus()
+    noexcept(std::is_nothrow_default_constructible_v<DefaultType>)
+    requires std::is_default_constructible_v<DefaultType> :
+        discrim_ { static_cast<DiscrimType>(0) },
+        storage_ { std::in_place_index<0>, DefaultType {} } {}
 
     // Construct a BasicStatus from an alternative.
 
@@ -219,9 +234,6 @@ struct BasicStatus final {
     }
 
     private:
-
-    using DiscrimType = status_discriminator_t<sizeof...(Es)>;
-    using StorageType = detail::Storage<Es...>;
 
     DiscrimType discrim_;
     StorageType storage_;

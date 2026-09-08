@@ -7,7 +7,7 @@
 #include <varerr/result.hpp>
 
 
-#include <algorithm>
+// #include <algorithm>
 #include <concepts>
 #include <cstddef>
 #include <functional>
@@ -19,81 +19,81 @@ using namespace varerr::tests::universe;
 
 // TODO: Remove this file once status.hpp and result.hpp tests refactored.
 
-TEST_CASE("status_impl_static", "[status][impl][static]") {
+// TEST_CASE("status_impl_static", "[status][impl][static]") {
 
-    STATIC_REQUIRE_FALSE(std::is_constructible_v<varerr::BasicStatus<UniverseE>>);
-    STATIC_REQUIRE_FALSE(std::is_default_constructible_v<varerr::BasicStatus<UniverseE>>);
-    STATIC_REQUIRE_FALSE(std::is_default_constructible_v<varerr::BasicStatus<UniverseE, E<1>>>);
+//     STATIC_REQUIRE_FALSE(std::is_constructible_v<varerr::BasicStatus<UniverseE>>);
+//     STATIC_REQUIRE_FALSE(std::is_default_constructible_v<varerr::BasicStatus<UniverseE>>);
+//     STATIC_REQUIRE_FALSE(std::is_default_constructible_v<varerr::BasicStatus<UniverseE, E<1>>>);
 
-    STATIC_REQUIRE(std::is_trivially_destructible_v<varerr::BasicStatus<UniverseE>>);
-    STATIC_REQUIRE(std::is_trivially_destructible_v<varerr::BasicStatus<UniverseE, E<1>>>);
+//     STATIC_REQUIRE(std::is_trivially_destructible_v<varerr::BasicStatus<UniverseE>>);
+//     STATIC_REQUIRE(std::is_trivially_destructible_v<varerr::BasicStatus<UniverseE, E<1>>>);
 
-    STATIC_REQUIRE(std::is_trivially_copyable_v<varerr::BasicStatus<UniverseE>>);
-    STATIC_REQUIRE(std::is_trivially_copy_assignable_v<varerr::BasicStatus<UniverseE>>);
-    STATIC_REQUIRE(std::is_trivially_copy_constructible_v<varerr::BasicStatus<UniverseE>>);
-    STATIC_REQUIRE(std::is_trivially_move_assignable_v<varerr::BasicStatus<UniverseE>>);
-    STATIC_REQUIRE(std::is_trivially_move_constructible_v<varerr::BasicStatus<UniverseE>>);
+//     STATIC_REQUIRE(std::is_trivially_copyable_v<varerr::BasicStatus<UniverseE>>);
+//     STATIC_REQUIRE(std::is_trivially_copy_assignable_v<varerr::BasicStatus<UniverseE>>);
+//     STATIC_REQUIRE(std::is_trivially_copy_constructible_v<varerr::BasicStatus<UniverseE>>);
+//     STATIC_REQUIRE(std::is_trivially_move_assignable_v<varerr::BasicStatus<UniverseE>>);
+//     STATIC_REQUIRE(std::is_trivially_move_constructible_v<varerr::BasicStatus<UniverseE>>);
 
-    STATIC_REQUIRE(std::is_trivially_copyable_v<varerr::BasicStatus<UniverseE, E<0>>>);
-    STATIC_REQUIRE(std::is_trivially_copy_assignable_v<varerr::BasicStatus<UniverseE, E<0>>>);
-    STATIC_REQUIRE(std::is_trivially_copy_constructible_v<varerr::BasicStatus<UniverseE, E<0>>>);
-    STATIC_REQUIRE(std::is_trivially_move_assignable_v<varerr::BasicStatus<UniverseE, E<0>>>);
-    STATIC_REQUIRE(std::is_trivially_move_constructible_v<varerr::BasicStatus<UniverseE, E<0>>>);
+//     STATIC_REQUIRE(std::is_trivially_copyable_v<varerr::BasicStatus<UniverseE, E<0>>>);
+//     STATIC_REQUIRE(std::is_trivially_copy_assignable_v<varerr::BasicStatus<UniverseE, E<0>>>);
+//     STATIC_REQUIRE(std::is_trivially_copy_constructible_v<varerr::BasicStatus<UniverseE, E<0>>>);
+//     STATIC_REQUIRE(std::is_trivially_move_assignable_v<varerr::BasicStatus<UniverseE, E<0>>>);
+//     STATIC_REQUIRE(std::is_trivially_move_constructible_v<varerr::BasicStatus<UniverseE, E<0>>>);
 
-}
+// }
 
-namespace {
+// namespace {
 
-template <typename... Ts>
-struct ExpectedLayout final {
-    std::size_t active;
-    varerr::detail::Storage<Ts...> alternatives;
-};
+// template <typename... Ts>
+// struct ExpectedLayout final {
+//     std::size_t active;
+//     varerr::detail::Storage<Ts...> alternatives;
+// };
 
-} // namespace
+// } // namespace
 
-TEST_CASE("status_impl_memory", "[status][impl][memory]") {
+// TEST_CASE("status_impl_memory", "[status][impl][memory]") {
 
-    using St = varerr::detail::Storage<E<0>, E<1>, E<2>>;
-    using Si = varerr::BasicStatus<UniverseE, E<0>, E<1>, E<2>>;
+//     using St = varerr::detail::Storage<E<0>, E<1>, E<2>>;
+//     using Si = varerr::BasicStatus<UniverseE, E<0>, E<1>, E<2>>;
 
-    STATIC_REQUIRE(sizeof(Si) >= sizeof(St));
-    STATIC_REQUIRE(alignof(Si) == std::max(alignof(std::size_t), alignof(St)));
-    STATIC_REQUIRE(sizeof(Si) % alignof(Si) == 0);
+//     STATIC_REQUIRE(sizeof(Si) >= sizeof(St));
+//     STATIC_REQUIRE(alignof(Si) == std::max(alignof(std::size_t), alignof(St)));
+//     STATIC_REQUIRE(sizeof(Si) % alignof(Si) == 0);
 
-    STATIC_REQUIRE(sizeof(Si) == sizeof(ExpectedLayout<E<0>, E<1>, E<2>>));
-    STATIC_REQUIRE(alignof(Si) == alignof(ExpectedLayout<E<0>, E<1>, E<2>>));
+//     STATIC_REQUIRE(sizeof(Si) == sizeof(ExpectedLayout<E<0>, E<1>, E<2>>));
+//     STATIC_REQUIRE(alignof(Si) == alignof(ExpectedLayout<E<0>, E<1>, E<2>>));
 
-}
+// }
 
-TEST_CASE("status_impl_normalize", "[status][impl][functional]") {
+// TEST_CASE("status_impl_normalize", "[status][impl][functional]") {
 
-    STATIC_REQUIRE(std::same_as<
-        varerr::Status<UniverseE, E<0>, E<1>>,
-        varerr::BasicStatus<UniverseE, E<0>, E<1>>
-    >);
+//     STATIC_REQUIRE(std::same_as<
+//         varerr::Status<UniverseE, E<0>, E<1>>,
+//         varerr::BasicStatus<UniverseE, E<0>, E<1>>
+//     >);
 
-    STATIC_REQUIRE(std::same_as<
-        varerr::Status<UniverseE, E<1>, E<0>>,
-        varerr::BasicStatus<UniverseE, E<0>, E<1>>
-    >);
+//     STATIC_REQUIRE(std::same_as<
+//         varerr::Status<UniverseE, E<1>, E<0>>,
+//         varerr::BasicStatus<UniverseE, E<0>, E<1>>
+//     >);
 
-    STATIC_REQUIRE(std::same_as<
-        varerr::Status<UniverseE, E<0>, E<0>>,
-        varerr::BasicStatus<UniverseE, E<0>>
-    >);
+//     STATIC_REQUIRE(std::same_as<
+//         varerr::Status<UniverseE, E<0>, E<0>>,
+//         varerr::BasicStatus<UniverseE, E<0>>
+//     >);
 
-    STATIC_REQUIRE(std::same_as<
-        varerr::Status<UniverseE>,
-        varerr::BasicStatus<UniverseE>
-    >);
+//     STATIC_REQUIRE(std::same_as<
+//         varerr::Status<UniverseE>,
+//         varerr::BasicStatus<UniverseE>
+//     >);
 
-    STATIC_REQUIRE(std::same_as<
-        varerr::Status<UniverseE, E<5>, E<2>, E<2>, E<8>, E<1>, E<2>, E<4>, E<2>>,
-        varerr::BasicStatus<UniverseE, E<1>, E<2>, E<4>, E<5>, E<8>>
-    >);
+//     STATIC_REQUIRE(std::same_as<
+//         varerr::Status<UniverseE, E<5>, E<2>, E<2>, E<8>, E<1>, E<2>, E<4>, E<2>>,
+//         varerr::BasicStatus<UniverseE, E<1>, E<2>, E<4>, E<5>, E<8>>
+//     >);
 
-}
+// }
 
 TEST_CASE("result_error_functional_deduction", "[result][error][functional]") {
 

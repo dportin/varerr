@@ -21,6 +21,13 @@ using mask_constant = std::integral_constant<std::size_t, I>;
 template <std::size_t I>
 using code_constant = std::integral_constant<std::size_t, I>;
 
+// Invoke a function F for every index I in Is.
+
+template <std::size_t... Is, typename F>
+constexpr void iterate_index_array(F f) {
+    (f(std::integral_constant<std::size_t, Is> {}), ...);
+}
+
 // Invoke a function F for every index I in [N].
 
 template <std::size_t N, typename F>
@@ -28,13 +35,6 @@ constexpr void iterate_index_sequence(F f) {
     [&]<std::size_t... Is>(std::index_sequence<Is...>) {
         (f(std::integral_constant<std::size_t, Is> {}), ...);
     }(std::make_index_sequence<N> {});
-}
-
-// Invoke a function F for every index I in Is.
-
-template <std::size_t... Is, typename F>
-constexpr void iterate_index_array(F f) {
-    (f(std::integral_constant<std::size_t, Is> {}), ...);
 }
 
 // Invoke a function F for every cref-qualified version of T.
@@ -83,42 +83,123 @@ using cvref_qualify_like_t = std::conditional_t<
     cv_qualify_like_t<S, E>&&
 >;
 
-// Lift an index sequence to an indexed type E and store the result in M.
+// Parameter pack.
+
+template <typename... Es>
+struct type_pack_t;
+
+// Determine whether a type occurs in a parameter pack.
 
 namespace detail {
 
-template <template <typename...> typename M, template <std::size_t> typename E, typename Is>
-struct lift_index_sequence_impl;
+template <typename T, typename Pack>
+struct pack_member_impl;
 
-template <template <typename...> typename M, template <std::size_t> typename E, std::size_t... Is>
-struct lift_index_sequence_impl<M, E, std::index_sequence<Is...>> : std::type_identity<M<E<Is>...>> {};
+template <typename T, typename... Ts>
+struct pack_member_impl<T, type_pack_t<Ts...>> : std::bool_constant<(std::same_as<T, Ts> || ...)> {};
 
 } // namespace detail
 
-template <template <typename...> typename M, template <std::size_t> typename E, std::size_t N>
-struct lift_index_sequence : detail::lift_index_sequence_impl<M, E, std::make_index_sequence<N>> {};
+template <typename T, typename Pack>
+inline constexpr bool pack_member_v = detail::pack_member_impl<T, Pack>::value;
 
-template <template <typename...> typename M, template <std::size_t> typename E, std::size_t N>
-using lift_index_sequence_t = lift_index_sequence<M, E, N>::type;
+// Determine the position of a type in a parameter pack.
+
+namespace detail {
+
+template <typename T, typename Pack>
+struct pack_index_impl;
+
+template <typename T, typename... Ts>
+struct pack_index_impl<T, type_pack_t<T, Ts...>> :
+    std::integral_constant<std::size_t, 0> {};
+
+template <typename T, typename S, typename... Ts>
+struct pack_index_impl<T, type_pack_t<S, Ts...>> :
+    std::integral_constant<std::size_t, pack_index_impl<T, type_pack_t<Ts...>>::value + 1> {};
+
+}
+
+template <typename T, typename Pack>
+requires pack_member_v<T, Pack>
+inline constexpr std::size_t pack_index_v = detail::pack_index_impl<T, Pack>::value;
 
 // Apply a metafunction F to the type parameters of M.
 
 namespace detail {
 
 template <typename F, typename M>
-struct pack_apply;
+struct pack_apply_impl;
 
 template <typename F, template <typename...> typename M, typename... Es>
 requires requires { typename F::template apply<Es...>; }
-struct pack_apply<F, M<Es...>> : std::type_identity<typename F::template apply<Es...>> {};
+struct pack_apply_impl<F, M<Es...>> : std::type_identity<typename F::template apply<Es...>> {};
 
 } // namespace detail
 
 template <typename F, typename M>
-using pack_apply_t = detail::pack_apply<F, M>::type;
+using pack_apply_t = detail::pack_apply_impl<F, M>::type;
 
 template <typename F, typename M>
 constexpr auto pack_apply_v = pack_apply_t<F, M>::value;
+
+// Apply a metafunction with a bound prefix or suffix.
+
+template <template <typename...> typename M>
+struct bind_adapter {
+    template <typename... Es>
+    using apply = M<Es...>;
+};
+
+template <template <typename...> typename M, typename... Args>
+struct bind_front_adapter {
+    template <typename... Es>
+    using apply = M<Args..., Es...>;
+};
+
+template <template <typename...> typename M, typename... Args>
+struct bind_back_adapter {
+    template <typename... Es>
+    using apply = M<Es..., Args...>;
+};
+
+// Apply an index metafunction with a bound prefix or suffix.
+
+template <template <std::size_t...> typename M>
+struct index_bind_adapter {
+    template <std::size_t... Is>
+    using apply = M<Is...>;
+};
+
+template <template <std::size_t...> typename M, std::size_t... Args>
+struct index_bind_front_adapter {
+    template <std::size_t... Is>
+    using apply = M<Args..., Is...>;
+};
+
+template <template <std::size_t...> typename M, std::size_t... Args>
+struct index_bind_back_adapter {
+    template <std::size_t... Is>
+    using apply = M<Is..., Args...>;
+};
+
+// Lift an index sequence to an indexed type E.
+
+namespace detail {
+
+template <template <std::size_t> typename E, typename Is>
+struct lift_index_sequence_impl;
+
+template <template <std::size_t> typename E, std::size_t... Is>
+struct lift_index_sequence_impl<E, std::index_sequence<Is...>> : std::type_identity<type_pack_t<E<Is>...>> {};
+
+} // namespace detail
+
+template <template <std::size_t> typename E, std::size_t N>
+struct lift_index_sequence : detail::lift_index_sequence_impl<E, std::make_index_sequence<N>> {};
+
+template <template <std::size_t> typename E, std::size_t N>
+using lift_index_sequence_t = lift_index_sequence<E, N>::type;
 
 // Reverse the elements of a parameter pack.
 

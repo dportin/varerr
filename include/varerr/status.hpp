@@ -38,30 +38,25 @@ concept IsTriviallyStorablePack = detail::is_trivially_storable_pack<Es...>::val
 template <typename U>
 concept IsTriviallyStorableRow = IsRow<U> && pack_apply_v<bind_meta_adapter<detail::is_trivially_storable_pack>, U>;
 
-// Determine whether a function is nothrow invocable over an index sequence.
-
 namespace detail {
 
-template <typename F, typename Is>
-inline constexpr bool is_nothrow_invocable_over_index_sequence_v = false;
-
-template <typename F, std::size_t... Is>
-inline constexpr bool is_nothrow_invocable_over_index_sequence_v<F, std::index_sequence<Is...>> =
-    (std::is_nothrow_invocable_v<F, std::integral_constant<std::size_t, Is>> && ...);
+// Determine whether a function is nothrow invocable over an index sequence.
 
 template <typename F, std::size_t N>
-inline constexpr bool is_nothrow_invocable_upto_index_v =
-    is_nothrow_invocable_over_index_sequence_v<F, std::make_index_sequence<N>>;
+inline constexpr bool is_nothrow_invocable_over_index_sequence_v =
+    []<std::size_t... Is>(std::index_sequence<Is...>) -> bool {
+        return (std::is_nothrow_invocable_v<F, std::integral_constant<std::size_t, Is>> && ...);
+    }(std::make_index_sequence<N> {});
 
 // Dispatch a function with the index of the active alternative. Consider using
 // a binary search or jump table when the number of alternatives is large to im-
-// prove performance. The current implementation simulates a jump table using a
-// compile-time unrolled conditional chain.
+// prove performance. The current implementation simulates a jump table using an
+// unrolled chain of constexpr conditionals.
 
 template <std::size_t N, typename F>
 requires (N > 0)
 [[nodiscard]] constexpr decltype(auto) dispatch_linear_dense(std::size_t n, F&& f)
-noexcept(is_nothrow_invocable_upto_index_v<F, N>) {
+noexcept(is_nothrow_invocable_over_index_sequence_v<F, N>) {
 
     assert(n < N);
 
@@ -81,7 +76,7 @@ noexcept(is_nothrow_invocable_upto_index_v<F, N>) {
 template <std::size_t N, typename F>
 requires (N > 0)
 [[nodiscard]] constexpr decltype(auto) dispatch(std::size_t n, F&& f)
-noexcept(is_nothrow_invocable_upto_index_v<F, N>) {
+noexcept(is_nothrow_invocable_over_index_sequence_v<F, N>) {
     return dispatch_linear_dense<N>(n, std::forward<F>(f));
 }
 

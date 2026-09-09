@@ -32,6 +32,7 @@ Clang-Tidy is enabled for all configurations. IWYU is enabled only for Clang con
 
 ## TODO
 
+- Remove forwarding constructor from `BasicStatus`.
 - Refactor `status.hpp` and `result.hpp` tests.
 - Simplify compile-time iteration with `iterate_index_sequence` and friends.
 - Simplify lifting operations with `pack_apply` and friends.

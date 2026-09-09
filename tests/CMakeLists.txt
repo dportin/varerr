@@ -115,6 +115,11 @@ if(${PROJECT_NAME}_TESTING AND ${PROJECT_NAME}_TESTING_IWYU)
         list(APPEND ${PROJECT_NAME}_IWYU_INCLUDE_DIRS "-I${_IWYU_HEADER_DIR}")
     endforeach()
 
+    set(${PROJECT_NAME}_IWYU_EXCLUDE_HEADERS
+        ${${PROJECT_NAME}_TESTING_IWYU_EXCLUDE}
+        ${${PROJECT_NAME}_TESTING_IWYU_EXCLUDE_EXTRA}
+    )
+
     add_custom_target(${PROJECT_NAME}_tests_iwyu)
 
     foreach(_IWYU_HEADER IN LISTS ${PROJECT_NAME}_IWYU_HEADERS)
@@ -133,6 +138,11 @@ if(${PROJECT_NAME}_TESTING AND ${PROJECT_NAME}_TESTING_IWYU)
 
         if(NOT DEFINED _IWYU_HEADER_RELATIVE)
             message(FATAL_ERROR "${PROJECT_NAME}: header outside header base directories: ${_IWYU_HEADER}")
+        endif()
+
+        if (_IWYU_HEADER_RELATIVE IN_LIST ${PROJECT_NAME}_IWYU_EXCLUDE_HEADERS)
+            message(STATUS "IWYU: Excluding header \"${_IWYU_HEADER}\" from test targets")
+            continue()
         endif()
 
         # Generate one translation unit per header.

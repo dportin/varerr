@@ -344,7 +344,7 @@ struct BasicResult final {
         static_assert(IsNormalizedRow<M, result_row_t<InvokeF>>, "and_then: F must return a normalized error row");
 
         using ErrRowF = row_union_normalized_t<M, Row<Es...>, result_row_t<InvokeF>>;
-        using StatusF = detail::basic_status_row_adapter_t<M, ErrRowF>;
+        using StatusF = status_from_normalized_row_t<M, ErrRowF>;
         using ResultF = result_rebind_t<InvokeF, result_value_t<InvokeF>, ErrRowF>;
 
         if (self.has_error()) [[unlikely]] {
@@ -408,7 +408,7 @@ struct BasicResult final {
             result_row_t<handler_invoke_result_t<std::remove_cvref_t<H>, Self, Fs>>...
         >;
 
-        using StatusH = detail::basic_status_row_adapter_t<M, ErrRowH>;
+        using StatusH = status_from_normalized_row_t<M, ErrRowH>;
         using ResultH = result_rebind_t<std::remove_cvref_t<Self>, T, ErrRowH>;
 
         if (self.has_value()) [[likely]] {

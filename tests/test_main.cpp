@@ -235,7 +235,6 @@ TEST_CASE("result_functional_transform_lifetime", "[result][functional]") {
 
 TEST_CASE("result_functional_and_then", "[result][functional]") {
 
-
     using R0 = varerr::Result<UniverseE, short, E<1>, E<2>, E<3>>;
     using R1 = varerr::Result<UniverseE, int, E<0>, E<2>, E<4>>;
 

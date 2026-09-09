@@ -5,15 +5,15 @@
 #include "storage.hpp"
 #include "algebra.hpp"
 
-#include <concepts>
 #include <cassert>
+#include <concepts>
 #include <cstddef>
 #include <cstdint>
 #include <limits>
 #include <memory>
+#include <optional>
 #include <type_traits>
 #include <utility>
-
 
 // This file implements the variadic error type which forms the unexpected bran-
 // ch of the main result type. The status type inherits trivial copyability and
@@ -23,9 +23,24 @@
 
 namespace varerr {
 
+// Determine whether the contents of a parameter pack are trivially storable.
+
 namespace detail {
 
+template <typename... Es>
+struct is_trivially_storable_pack : std::bool_constant<(IsTriviallyStorable<Es> && ...)> {};
+
+} // namespace detail
+
+template <typename... Es>
+concept IsTriviallyStorablePack = detail::is_trivially_storable_pack<Es...>::value;
+
+template <typename U>
+concept IsTriviallyStorableRow = IsRow<U> && pack_apply_v<bind_meta_adapter<detail::is_trivially_storable_pack>, U>;
+
 // Determine whether a function is nothrow invocable over an index sequence.
+
+namespace detail {
 
 template <typename F, typename Is>
 inline constexpr bool is_nothrow_invocable_over_index_sequence_v = false;
@@ -72,20 +87,9 @@ noexcept(is_nothrow_invocable_upto_index_v<F, N>) {
 
 } // namespace detail
 
-// Determine whether a function is nothrow invocable for every cref-qualified
-// version of its arguments. This is more conservative than necessary but the
-// loss of precision matters only for visitors that are nothrow invocable for
-// some but not all cref-qualifications of their trivially copyable arguments.
-
-template <typename F, typename... Es>
-inline constexpr bool is_nothrow_visitable_v =
-    (std::is_nothrow_invocable_v<F, Es&> && ...) &&
-    (std::is_nothrow_invocable_v<F, const Es&> && ...) &&
-    (std::is_nothrow_invocable_v<F, Es&&> && ...) &&
-    (std::is_nothrow_invocable_v<F, const Es&&> && ...);
-
-// Determine the smallest unsigned integral type that discriminates between N
-// alternatives. The returned std::uint_leastN_t are unconditionally present.
+// The discriminator has the smallest unsigned integral type that discriminates
+// between N alternatives. The returned std::uint_leastN_t types are unconditio-
+// nally present.
 
 namespace detail {
 
@@ -116,11 +120,37 @@ consteval auto status_discriminator_impl() {
 template <std::size_t N>
 using status_discriminator_t = decltype(detail::status_discriminator_impl<N>())::type;
 
+// A visitor V is valid with respect to a parameter pack Es if V is invocable at
+// and has a uniform return type for all alternatives E in Es. The returned type
+// tracks the const qualifier on the Self parameter.
+
+template <typename Self, typename E>
+using visitor_argument_t = transfer_const_t<Self, E>&;
+
+template <typename Self, typename V, typename E>
+using visitor_invoke_result_t = std::invoke_result_t<V, visitor_argument_t<Self, E>>;
+
+template <typename Self, typename V, typename... Es>
+concept IsVisitorInvocableLike = (std::is_invocable_v<V, visitor_argument_t<Self, Es>> && ...);
+
+template <typename Self, typename V, typename... Es>
+concept IsVisitorUniformLike = IsVisitorInvocableLike<Self, V, Es...> && is_uniform_v<visitor_invoke_result_t<Self, V, Es>...>;
+
+template <typename Self, typename V, typename... Es>
+concept IsVisitorValidLike = IsVisitorInvocableLike<Self, V, Es...> && IsVisitorUniformLike<Self, V, Es...>;
+
+// The BasicStatus class is parameterized by a normalized row of trivially stor-
+// able types. Trivial storability implies that every alternative is cvref-unqu-
+// alified. The Status alias is a normalizing constructor for BasicStatus.
+
 template <typename M, IsTriviallyStorable... Es>
 requires IsNormalizedPack<M, Es...>
 struct BasicStatus final {
 
     private:
+
+    // DefaultType must be defined prior to the default constructor's requires
+    // clause.
 
     using DiscrimType = status_discriminator_t<sizeof...(Es)>;
     using StorageType = detail::Storage<Es...>;
@@ -128,32 +158,36 @@ struct BasicStatus final {
 
     public:
 
-    // This class inherits trivial copyability and destructibility from its sto-
-    // rage. The sizeof invariant is unreachable but retained for documentation.
-    // The remaining class invariants ensure that the copy and move constructors
-    // are unconditionally noexcept.
+    // The primary template must have a non-empty parameter pack. The assertion
+    // is vacuous because the empty case is handled by the BasicStatus<M> speci-
+    // alization. It is retained for documentation.
 
     static_assert(sizeof...(Es) > 0,
-        "BasicStatus<M, Es...>: alternatives must be non-empty");
+        "BasicStatus: alternatives must be non-empty");
+
+    // This class inherits trivial copyability and destructibility from its sto-
+    // rage. The remaining class invariants ensure that the copy and move const-
+    // ructors are unconditionally noexcept.
 
     static_assert((std::is_trivially_copyable_v<Es> && ...),
-        "BasicStatus<M, Es...>: alternatives must be trivially copyable");
+        "BasicStatus: alternatives must be trivially copyable");
 
     static_assert((std::is_trivially_destructible_v<Es> && ...),
-        "BasicStatus<M, Es...>: alternatives must be trivially destructible");
+        "BasicStatus: alternatives must be trivially destructible");
 
     static_assert((std::is_nothrow_copy_constructible_v<Es> && ...),
-        "BasicStatus<M, Es...>: alternatives must be nothrow copy-constructible");
+        "BasicStatus: alternatives must be nothrow copy-constructible");
 
     static_assert((std::is_nothrow_move_constructible_v<Es> && ...),
-        "BasicStatus<M, Es...>: alternatives must be nothrow move-constructible");
+        "BasicStatus: alternatives must be nothrow move-constructible");
 
+    // The default constructor value-constructs the first alternative.
 
     constexpr BasicStatus()
     noexcept(std::is_nothrow_default_constructible_v<DefaultType>)
     requires std::is_default_constructible_v<DefaultType> :
         discrim_ { static_cast<DiscrimType>(0) },
-        storage_ { std::in_place_index<0>, DefaultType {} } {}
+        storage_ { std::in_place_index<0> } {}
 
     // Construct a BasicStatus from an alternative.
 
@@ -176,12 +210,11 @@ struct BasicStatus final {
     noexcept(std::is_nothrow_constructible_v<std::remove_cvref_t<E>, E>) :
         BasicStatus(std::in_place_type<std::remove_cvref_t<E>>, std::forward<E>(e)) {}
 
-    // The widening constructor deliberately leaves the class members uninitial-
+    // The widening constructor leaves the class members deliberately uninitial-
     // ized before invoking the visitor. P1331R2 permits uninitialized class me-
     // mbers in constexpr contexts provided that the uninitialized class members
-    // are not read. The visitor writes each member once before it returns. Note
-    // that the alternatives are default-initialized regardless. The constructor
-    // is unconditionally noexcept.
+    // are not read. The visitor writes each member before it returns. The class
+    // invariants make the constructor unconditionally noexcept.
 
     template <IsTriviallyStorable... Fs>
     requires IsNormalizedPack<M, Fs...> &&
@@ -194,43 +227,70 @@ struct BasicStatus final {
         });
     }
 
-    // Return a pointer to the underlying storage by alternative.
+    // Determine whether E is the active alternative.
+
+    template <typename E>
+    [[nodiscard]] constexpr bool holds() const noexcept {
+        if constexpr (row_elem_normalized_v<M, E, Row<Es...>>) {
+            return this->discrim_ == static_cast<DiscrimType>(row_index_normalized_v<M, E, Row<Es...>>);
+        }
+        return false;
+    }
+
+    // Return a pointer to the underlying storage for alternative E if E is the
+    // active alternative. Returns nullptr if E is not the active alternative.
 
     template <typename E, typename Self>
     [[nodiscard]] constexpr transfer_const_t<Self, E>* get_if(this Self& self) noexcept  {
         if constexpr (row_elem_normalized_v<M, E, Row<Es...>>) {
             if (self.template holds<E>()) {
                 return std::addressof(detail::storage_get<row_index_normalized_v<M, E, Row<Es...>>>(self.storage_));
-            } else {
-                return nullptr;
             }
-        } else {
-            return nullptr;
         }
+        return nullptr;
     }
 
-    // Dispatch a visitor to the active member by index.
+    // Return a reference to the underlying storage for alternative E if E is
+    // the active alternative.
+
+    template <typename E, typename Self>
+    requires row_elem_normalized_v<M, E, Row<Es...>>
+    [[nodiscard]] constexpr transfer_const_t<Self, E>& get(this Self& self) noexcept {
+        auto pointer = self.template get_if<E>();
+        assert(pointer && "BasicStatus::get: alternative not active");
+        return *pointer;
+    }
+
+    // Return the index of the underlying storage for alternative E if E is the
+    // active alternative. Returns std::nullopt if E is not the active alternat-
+    // ive. The return type is always std::size_t (never the discriminator).
+
+    template <typename E>
+    [[nodiscard]] static constexpr std::optional<std::size_t> lookup() noexcept {
+        return row_lookup_normalized_v<M, E, Row<Es...>>;
+    }
+
+    template <typename E>
+    requires row_elem_normalized_v<M, E, Row<Es...>>
+    [[nodiscard]] static constexpr std::size_t index() noexcept {
+        return row_index_normalized_v<M, E, Row<Es...>>;
+    }
+
+    // Dispatch a visitor to the active member by index. The noexcept specifica-
+    // tion is more conservative than necessary but the loss of precision is on-
+    // ly relevant when the visitor differs on the const and non-const qualific-
+    // ation of a trivially copyable argument.
 
     template <typename Self, typename F>
-    constexpr decltype(auto) visit(this Self&& self, F&& f)
-    noexcept(is_nothrow_visitable_v<F, Es...>) {
+    requires IsVisitorValidLike<Self, F, Es...>
+    constexpr decltype(auto) visit(this Self& self, F&& f)
+    noexcept((std::is_nothrow_invocable_v<F, visitor_argument_t<Self, Es>> && ...)) {
         return detail::dispatch<sizeof...(Es)>(
             self.discrim_,
             [&]<std::size_t I>(std::integral_constant<std::size_t, I>) -> decltype(auto) {
-                return std::forward<F>(f)(detail::storage_get<I>(std::forward<Self>(self).storage_));
+                return std::forward<F>(f)(detail::storage_get<I>(self.storage_));
             }
         );
-    }
-
-    // Determine whether an alternative is active.
-
-    template <typename E>
-    [[nodiscard]] constexpr bool holds() const noexcept {
-        if constexpr (row_elem_normalized_v<M, E, Row<Es...>>) {
-            return this->discrim_ == static_cast<DiscrimType>(row_index_normalized_v<M, E, Row<Es...>>);
-        } else {
-            return false;
-        }
     }
 
     private:
@@ -260,26 +320,38 @@ struct BasicStatus<M> final {
 
 };
 
-namespace detail {
-
-template <typename M, typename U>
-struct basic_status_row_adapter;
+// Construct a BasicStatus from a normalized or non-normalized parameter pack.
 
 template <typename M, typename... Es>
-requires IsNormalizedPack<M, Es...>
-struct basic_status_row_adapter<M, Row<Es...>> : std::type_identity<BasicStatus<M, Es...>> {};
+requires IsTriviallyStorablePack<Es...> &&
+         IsNormalizedPack<M, Es...>
+using status_from_normalized_pack_t = BasicStatus<M, Es...>;
+
+template <typename M, typename... Es>
+requires IsTriviallyStorablePack<Es...> &&
+         IsRankedPack<M, Es...>
+using status_from_pack_t = pack_apply_t<bind_lift_adapter<BasicStatus, M>, pack_normalize_t<M, Es...>>;
+
+// Construct a BasicStatus from a normalized or non-normalized Row.
 
 template <typename M, typename U>
-requires IsNormalizedRow<M, U>
-using basic_status_row_adapter_t = basic_status_row_adapter<M, U>::type;
+requires IsRow<U> &&
+         IsTriviallyStorableRow<U> &&
+         IsNormalizedRow<M, U>
+using status_from_normalized_row_t = pack_apply_t<bind_lift_adapter<BasicStatus, M>, U>;
 
-} // namespace detail
+template <typename M, typename U>
+requires IsRow<U> &&
+         IsTriviallyStorableRow<U> &&
+         IsRankedRow<M, U>
+using status_from_row_t = status_from_normalized_row_t<M, row_normalize_t<M, U>>;
 
-// Construct a BasicStatus from a Row.
+// The normalizing constructor is an alias for BasicStatus.
 
-template <typename M, IsTriviallyStorable... Es>
-requires IsRankedPack<M, Es...>
-using Status = detail::basic_status_row_adapter_t<M, pack_normalize_t<M, Es...>>;
+template <typename M, typename... Es>
+requires IsTriviallyStorablePack<Es...> &&
+         IsRankedPack<M, Es...>
+using Status = status_from_pack_t<M, Es...>;
 
 } // namespace varerr
 

@@ -43,6 +43,8 @@ TEMPLATE_TEST_CASE("varerr_status_trivial", "[varerr][status]",
     HomStatus<0>, HomStatus<3>, (HetStatus<0, 3>), (HetStatus<3, 3>)
 ) {
 
+    using TrivialStatus = varerr::Status<UniverseI, TrivialType>;
+
     // BasicStatus<M, Es...> inherits triviality from Storage.
 
     STATIC_REQUIRE(std::is_trivially_copyable_v<TestType>);
@@ -52,11 +54,15 @@ TEMPLATE_TEST_CASE("varerr_status_trivial", "[varerr][status]",
     STATIC_REQUIRE(std::is_trivially_copy_assignable_v<TestType>);
     STATIC_REQUIRE(std::is_trivially_move_assignable_v<TestType>);
 
+    // BasicStatus<M, Es...> is never trivially default constructible.
+
+    STATIC_REQUIRE_FALSE(std::is_trivially_default_constructible_v<HomStatus<1>>);
+    STATIC_REQUIRE_FALSE(std::is_trivially_default_constructible_v<TrivialStatus>);
+
 }
 
 TEST_CASE("varerr_status_construct_default", "[varerr][status]") {
 
-    using TrivialStatus = varerr::Status<UniverseI, TrivialType>;
     using NoDefaultStatus = varerr::Status<UniverseI, NoDefaultConstructType>;
 
     // BasicStatus<M> is never constructible.
@@ -69,9 +75,16 @@ TEST_CASE("varerr_status_construct_default", "[varerr][status]") {
     STATIC_REQUIRE(std::is_default_constructible_v<HomStatus<1>>);
     STATIC_REQUIRE_FALSE(std::is_default_constructible_v<NoDefaultStatus>);
 
-    // BasicStatus<M, Es...> is never trivially default constructible.
+}
 
-    STATIC_REQUIRE_FALSE(std::is_trivially_default_constructible_v<HomStatus<1>>);
-    STATIC_REQUIRE_FALSE(std::is_trivially_default_constructible_v<TrivialStatus>);
+TEST_CASE("varerr_status_construct", "[varerr][status]") {
+    REQUIRE(false);
+}
 
+TEST_CASE("varerr_status_construct_emplace", "[varerr][status]") {
+    REQUIRE(false);
+}
+
+TEST_CASE("varerr_status_construct_widen", "[varerr][status]") {
+    REQUIRE(false);
 }

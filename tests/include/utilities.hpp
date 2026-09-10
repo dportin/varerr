@@ -37,6 +37,14 @@ constexpr void iterate_index_sequence(F f) {
     }(std::make_index_sequence<N> {});
 }
 
+// Invoke a function F for every const-qualified versions of T.
+
+template <typename T, typename F>
+constexpr void iterate_const_matrix(F f) {
+    f(std::type_identity<T> {});
+    f(std::type_identity<const T> {});
+}
+
 // Invoke a function F for every cref-qualified version of T.
 
 template <typename T, typename F>

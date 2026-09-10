@@ -4,9 +4,14 @@
 
 #include "include/utilities.hpp"
 #include "include/universe.hpp"
+#include "varerr/utilities.hpp"
 
-#include <type_traits>
+#include <varerr/algebra.hpp>
 #include <varerr/status.hpp>
+
+#include <cstddef>
+#include <type_traits>
+#include <utility>
 
 using namespace varerr::tests;
 using namespace varerr::tests::universe;
@@ -87,4 +92,97 @@ TEST_CASE("varerr_status_construct_emplace", "[varerr][status]") {
 
 TEST_CASE("varerr_status_construct_widen", "[varerr][status]") {
     REQUIRE(false);
+}
+
+
+template <typename S, typename E>
+concept IsStatusGetWellFormed = requires {
+    std::declval<S>().template get<E>();
+};
+
+TEST_CASE("varerr_status_constraints_get", "[varerr][status]") {
+
+    constexpr std::size_t kTestIndexBound = 7;
+
+    using R0 = varerr::Row<E<1>, E<3>, E<5>>;
+    using B0 = varerr::status_from_row_t<UniverseE, R0>;
+
+    // The error row must be non-empty.
+
+    iterate_cvref_matrix<HomStatus<0>>([]<typename T>(const std::type_identity<T>) -> void {
+        STATIC_REQUIRE_FALSE(IsStatusGetWellFormed<T, E<0>>);
+        STATIC_REQUIRE_FALSE(IsStatusGetWellFormed<T, E<1>>);
+    });
+
+    // The element must be a member of the error row.
+
+    iterate_index_sequence<kTestIndexBound>([]<std::size_t I>(const index_constant<I>) -> void {
+        STATIC_REQUIRE(IsStatusGetWellFormed<B0&, E<I>> == varerr::row_elem_normalized_v<UniverseE, E<I>, R0>);
+    });
+
+    // Only non-volatile lvalue references are permitted.
+
+    iterate_cvref_matrix<B0>([]<typename T>(const std::type_identity<T>) -> void {
+        constexpr bool well_formed = std::is_lvalue_reference_v<T> && !std::is_volatile_v<std::remove_reference_t<T>>;
+        STATIC_REQUIRE(IsStatusGetWellFormed<T, E<3>> == well_formed);
+    });
+
+    // The returned reference tracks the constness of the status object.
+
+    iterate_const_matrix<B0>([]<typename T>(const std::type_identity<T>) -> void {
+        STATIC_REQUIRE(std::same_as<
+            decltype(std::declval<T&>().template get<E<3>>()),
+            std::conditional_t<std::is_const_v<T>, const E<3>&, E<3>&>
+        >);
+    });
+
+}
+
+template <typename S, typename E>
+concept IsStatusGetIfWellFormed = requires {
+    std::declval<S>().template get_if<E>();
+};
+
+TEST_CASE("varerr_status_constraints_get_if", "[varerr][status]") {
+
+    constexpr std::size_t kTestIndexBound = 7;
+
+    using R0 = varerr::Row<E<1>, E<3>, E<5>>;
+    using B0 = varerr::status_from_row_t<UniverseE, R0>;
+
+    // The error row must be non-empty.
+
+    iterate_cvref_matrix<HomStatus<0>>([]<typename T>(const std::type_identity<T>) -> void {
+        STATIC_REQUIRE_FALSE(IsStatusGetIfWellFormed<T, E<0>>);
+        STATIC_REQUIRE_FALSE(IsStatusGetIfWellFormed<T, E<1>>);
+    });
+
+    // The element must be a member of the error row.
+
+    iterate_index_sequence<kTestIndexBound>([]<std::size_t I>(const index_constant<I>) -> void {
+        STATIC_REQUIRE(IsStatusGetIfWellFormed<B0&, E<I>> == varerr::row_elem_normalized_v<UniverseE, E<I>, R0>);
+    });
+
+    // Only non-volatile lvalue references are permitted.
+
+    iterate_cvref_matrix<B0>([]<typename T>(const std::type_identity<T>) -> void {
+        constexpr bool well_formed = std::is_lvalue_reference_v<T> && !std::is_volatile_v<std::remove_reference_t<T>>;
+        STATIC_REQUIRE(IsStatusGetIfWellFormed<T, E<3>> == well_formed);
+    });
+
+    // The returned pointer tracks the constness of the status object.
+
+    iterate_const_matrix<B0>([]<typename T>(const std::type_identity<T>) -> void {
+        STATIC_REQUIRE(std::same_as<
+            decltype(std::declval<T&>().template get_if<E<3>>()),
+            std::conditional_t<std::is_const_v<T>, const E<3>*, E<3>*>
+        >);
+    });
+
+}
+
+TEST_CASE("varerr_status_constraints_visit", "[varerr][status]") {
+
+    REQUIRE(false);
+
 }

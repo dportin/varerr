@@ -11,7 +11,6 @@
 #include <cstdint>
 #include <limits>
 #include <memory>
-#include <optional>
 #include <type_traits>
 #include <utility>
 
@@ -48,10 +47,11 @@ inline constexpr bool is_nothrow_invocable_over_index_sequence_v =
         return (std::is_nothrow_invocable_v<F, std::integral_constant<std::size_t, Is>> && ...);
     }(std::make_index_sequence<N> {});
 
-// Dispatch a function with the index of the active alternative. Consider using
-// a binary search or jump table when the number of alternatives is large to im-
-// prove performance. The current implementation simulates a jump table using an
-// unrolled chain of constexpr conditionals.
+// Dispatch a function F with the index of the active alternative. Note that F
+// may contain forwarded state and thus must be invoked exactly once. Consider
+// switching to binary search or jump table when the number of alternatives is
+// large. The current implementation simulates a jump table using an unrolled
+// chain of constexpr conditionals.
 
 template <std::size_t N, typename F>
 requires (N > 0)
@@ -117,10 +117,11 @@ using status_discriminator_t = decltype(detail::status_discriminator_impl<N>()):
 
 // A visitor V is valid with respect to a parameter pack Es if V is invocable at
 // and has a uniform return type for all alternatives E in Es. The concepts tra-
-// ck the const qualifier on the Self parameter.
+// ck the constness and value category of the Self parameter (so that a visitor
+// accepting E& binds to an lvalue while one accepting E&& binds to an rvalue).
 
 template <typename Self, typename E>
-using visitor_argument_t = transfer_const_t<Self, E>&;
+using visitor_argument_t = decltype(std::forward_like<Self>(std::declval<E&>()));
 
 template <typename Self, typename V, typename E>
 using visitor_invoke_result_t = std::invoke_result_t<V, visitor_argument_t<Self, E>>;
@@ -233,15 +234,28 @@ struct BasicStatus final {
         return false;
     }
 
+    // Return the index of the underlying storage for the active alternative.
+    // The return type is always std::size_t (never the discriminator).
+
+    [[nodiscard]] constexpr std::size_t index() noexcept {
+        return static_cast<std::size_t>(this->discrim_);
+    }
+
+    // The accessors are constrained to non-volatile lvalue references: volatile
+    // is prohibited because the discriminator and active member must be consis-
+    // tent and the class provides no internal synchronization; rvalue referenc-
+    // es are prohibited to prevent dangling references and pointers.
+
     // Return a pointer to the underlying storage for alternative E if E is the
     // active alternative. Returns nullptr if E is not the active alternative.
 
     template <typename E, typename Self>
-    [[nodiscard]] constexpr transfer_const_t<Self, E>* get_if(this Self& self) noexcept  {
-        if constexpr (row_elem_normalized_v<M, E, Row<Es...>>) {
-            if (self.template holds<E>()) {
-                return std::addressof(detail::storage_get<row_index_normalized_v<M, E, Row<Es...>>>(self.storage_));
-            }
+    requires IsNonVolatileLValueReference<Self> &&
+             row_elem_normalized_v<M, E, Row<Es...>>
+    // NOLINTNEXTLINE(cppcoreguidelines-missing-std-forward)
+    [[nodiscard]] constexpr transfer_const_t<Self, E>* get_if(this Self&& self) noexcept  {
+        if (self.template holds<E>()) {
+            return std::addressof(detail::storage_get<row_index_normalized_v<M, E, Row<Es...>>>(self.storage_));
         }
         return nullptr;
     }
@@ -250,42 +264,31 @@ struct BasicStatus final {
     // the active alternative.
 
     template <typename E, typename Self>
-    requires row_elem_normalized_v<M, E, Row<Es...>>
-    [[nodiscard]] constexpr transfer_const_t<Self, E>& get(this Self& self) noexcept {
+    requires IsNonVolatileLValueReference<Self> &&
+             row_elem_normalized_v<M, E, Row<Es...>>
+    // NOLINTNEXTLINE(cppcoreguidelines-missing-std-forward)
+    [[nodiscard]] constexpr transfer_const_t<Self, E>& get(this Self&& self) noexcept {
         auto pointer = self.template get_if<E>();
         assert(pointer && "BasicStatus::get: alternative not active");
         return *pointer;
     }
 
-    // Return the index of the underlying storage for alternative E if E is the
-    // active alternative. Returns std::nullopt if E is not the active alternat-
-    // ive. The return type is always std::size_t (never the discriminator).
-
-    template <typename E>
-    [[nodiscard]] static constexpr std::optional<std::size_t> lookup() noexcept {
-        return row_lookup_normalized_v<M, E, Row<Es...>>;
-    }
-
-    template <typename E>
-    requires row_elem_normalized_v<M, E, Row<Es...>>
-    [[nodiscard]] static constexpr std::size_t index() noexcept {
-        return row_index_normalized_v<M, E, Row<Es...>>;
-    }
-
-    // Dispatch a visitor to the active member by index. The noexcept specifica-
-    // tion asserts nothrow invocability across the entire error row and is thus
-    // more conservative than necessary.
+    // Dispatch a visitor F to the active member by index. The visit method re-
+    // jects volatile but accepts rvalue references. The noexcept specification
+    // asserts nothrow invocability over the entire error row and is thus more
+    // conservative than necessary.
 
     template <typename Self, typename F>
-    requires IsVisitorUniformLike<Self, F, Es...>
-    constexpr decltype(auto) visit(this Self& self, F&& f)
+    requires IsNonVolatile<Self> &&
+             IsVisitorUniformLike<Self, F, Es...>
+    constexpr decltype(auto) visit(this Self&& self, F&& f)
     noexcept((IsVisitorNothrowInvocableWithLike<Self, F, Es> && ...)) {
         return detail::dispatch<sizeof...(Es)>(
             self.discrim_,
             [&]<std::size_t I>(std::integral_constant<std::size_t, I>)
             noexcept(IsVisitorNothrowInvocableWithLike<Self, F, detail::pack_subscript_t<I, Es...>>)
                 -> decltype(auto) {
-                return std::forward<F>(f)(detail::storage_get<I>(self.storage_));
+                return std::forward<F>(f)(detail::storage_get<I>(std::forward<Self>(self).storage_));
             }
         );
     }
@@ -316,6 +319,24 @@ struct BasicStatus<M> final {
     ~BasicStatus() noexcept = default;
 
 };
+
+// Destructure BasicStatus into its components.s
+
+namespace detail {
+
+template <typename S>
+struct status_row;
+
+template <typename M, typename... Es>
+struct status_row<BasicStatus<M, Es...>> : std::type_identity<Row<Es...>> {};
+
+}
+
+template <typename S>
+using status_row_t = detail::status_row<std::remove_cvref_t<S>>::type;
+
+template <typename S, std::size_t I>
+using status_alternative_t = detail::row_subscript_t<I, status_row_t<S>>;
 
 // Construct a BasicStatus from a normalized or non-normalized parameter pack.
 

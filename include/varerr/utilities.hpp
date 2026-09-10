@@ -11,6 +11,14 @@ namespace varerr {
 template <typename From, typename To>
 using transfer_const_t = std::conditional_t<std::is_const_v<std::remove_reference_t<From>>, const To, To>;
 
+// Determine whether a type T is a non-volatile lvalue.
+
+template <typename T>
+concept IsNonVolatile = !std::is_volatile_v<std::remove_reference_t<T>>;
+
+template <typename T>
+concept IsNonVolatileLValueReference = std::is_lvalue_reference_v<T> && IsNonVolatile<T>;
+
 // Determine whether every element of a parameter pack has the same type.
 
 template <typename... Es>

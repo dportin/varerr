@@ -49,6 +49,11 @@ concept IsStatusHoldsWellFormed = requires {
     std::declval<S>().template holds<E>();
 };
 
+template <typename S>
+concept IsStatusIndexWellFormed = requires {
+    std::declval<S>().index();
+};
+
 template <typename S, typename E>
 concept IsStatusGetWellFormed = requires {
     std::declval<S>().template get<E>();
@@ -57,11 +62,6 @@ concept IsStatusGetWellFormed = requires {
 template <typename S, typename E>
 concept IsStatusGetIfWellFormed = requires {
     std::declval<S>().template get_if<E>();
-};
-
-template <typename S>
-concept IsStatusIndexWellFormed = requires {
-    std::declval<S>().index();
 };
 
 template <typename S, typename V>
@@ -139,8 +139,7 @@ struct VisitorVoidPartialConstR {
     [[maybe_unused]] void operator()(const E<I>&&) const noexcept {}
 };
 
-
-// Check whether the reference propagates through visit.
+// Check whether references propagate through visitors.
 
 struct VisitorRefPassThruL {
     [[maybe_unused]] decltype(auto) operator()(auto& e) const noexcept { return (e.value_); }
@@ -150,17 +149,31 @@ struct VisitorRefPassThruConstL {
     [[maybe_unused]] decltype(auto) operator()(const auto& e) const noexcept { return (e.value_); }
 };
 
-// struct TestVisitorUniform {
-//     std::size_t operator()(const auto& e) const noexcept { return e.value_; }
-// };
+// Check whether noexcept propagates across alternatives.
 
-// struct TestVisitorPartial {
-//     void operator()(const E<0>&) const noexcept {}
-// };
+template <std::size_t I>
+struct VisitorThrowOnIndexConstL {
+    [[maybe_unused]] void operator()(const E<I>&) const {}
+    [[maybe_unused]] void operator()(const auto&) const noexcept {}
+};
 
-// struct TestVisitorNonUniform {
-//     void operator()(const auto& e) const noexcept { return e; }
-// };
+// Differentiates const from non-const lvalue reference.
+
+struct VisitorThrowOnConstL {
+    [[maybe_unused]] void operator()(auto&) const noexcept {}
+    [[maybe_unused]] void operator()(auto&&) const noexcept {}
+    [[maybe_unused]] void operator()(const auto&) const {}
+    [[maybe_unused]] void operator()(const auto&&) const noexcept {}
+};
+
+// Differentiates lvalue from rvalue references.
+
+struct VisitorThrowOnR {
+    [[maybe_unused]] void operator()(auto&) const noexcept {}
+    [[maybe_unused]] void operator()(auto&&) const {}
+    [[maybe_unused]] void operator()(const auto&) const noexcept {}
+    [[maybe_unused]] void operator()(const auto&&) const noexcept {}
+};
 
 } // namespace
 
@@ -213,7 +226,6 @@ TEST_CASE("varerr_status_construct_widen", "[varerr][status]") {
     REQUIRE(false);
 }
 
-
 TEST_CASE("varerr_status_constraints_holds", "[varerr][status]") {
 
     constexpr std::size_t kTestIndexBound = 7;
@@ -259,40 +271,6 @@ TEST_CASE("varerr_status_constraints_index", "[varerr][status]") {
 
 }
 
-TEST_CASE("varerr_status_constraints_get", "[varerr][status]") {
-
-    constexpr std::size_t kTestIndexBound = 7;
-
-    using R0 = varerr::Row<E<1>, E<3>, E<5>>;
-    using B0 = varerr::status_from_row_t<UniverseE, R0>;
-
-    // The error row must be non-empty.
-
-    STATIC_REQUIRE_FALSE(IsStatusGetWellFormed<HomStatus<0>&, E<0>>);
-
-    // The element must be a member of the error row.
-
-    iterate_index_sequence<kTestIndexBound>([]<std::size_t I>(const index_constant<I>) -> void {
-        constexpr bool well_formed = varerr::row_elem_normalized_v<UniverseE, E<I>, R0>;
-        STATIC_REQUIRE(IsStatusGetWellFormed<B0&, E<I>> == well_formed);
-    });
-
-    // Only non-volatile lvalue references are permitted.
-
-    iterate_cvref_matrix<B0>([]<typename T>(const std::type_identity<T>) -> void {
-        constexpr bool well_formed = std::is_lvalue_reference_v<T> && !std::is_volatile_v<std::remove_reference_t<T>>;
-        STATIC_REQUIRE(IsStatusGetWellFormed<T, E<3>> == well_formed);
-    });
-
-    // The returned reference tracks the constness of the status object.
-
-    iterate_const_matrix<B0>([]<typename T>(const std::type_identity<T>) -> void {
-        using GetResult = std::conditional_t<std::is_const_v<T>, const E<3>&, E<3>&>;
-        STATIC_REQUIRE(std::same_as<decltype(std::declval<T&>().template get<E<3>>()), GetResult>);
-    });
-
-}
-
 TEST_CASE("varerr_status_constraints_get_if", "[varerr][status]") {
 
     constexpr std::size_t kTestIndexBound = 7;
@@ -327,9 +305,41 @@ TEST_CASE("varerr_status_constraints_get_if", "[varerr][status]") {
 
 }
 
-TEST_CASE("varerr_status_constraints_visit", "[varerr][status]") {
+TEST_CASE("varerr_status_constraints_get", "[varerr][status]") {
 
-    // constexpr std::size_t kTestIndexBound = 7;
+    constexpr std::size_t kTestIndexBound = 7;
+
+    using R0 = varerr::Row<E<1>, E<3>, E<5>>;
+    using B0 = varerr::status_from_row_t<UniverseE, R0>;
+
+    // The error row must be non-empty.
+
+    STATIC_REQUIRE_FALSE(IsStatusGetWellFormed<HomStatus<0>&, E<0>>);
+
+    // The element must be a member of the error row.
+
+    iterate_index_sequence<kTestIndexBound>([]<std::size_t I>(const index_constant<I>) -> void {
+        constexpr bool well_formed = varerr::row_elem_normalized_v<UniverseE, E<I>, R0>;
+        STATIC_REQUIRE(IsStatusGetWellFormed<B0&, E<I>> == well_formed);
+    });
+
+    // Only non-volatile lvalue references are permitted.
+
+    iterate_cvref_matrix<B0>([]<typename T>(const std::type_identity<T>) -> void {
+        constexpr bool well_formed = std::is_lvalue_reference_v<T> && !std::is_volatile_v<std::remove_reference_t<T>>;
+        STATIC_REQUIRE(IsStatusGetWellFormed<T, E<3>> == well_formed);
+    });
+
+    // The returned reference tracks the constness of the status object.
+
+    iterate_const_matrix<B0>([]<typename T>(const std::type_identity<T>) -> void {
+        using GetResult = std::conditional_t<std::is_const_v<T>, const E<3>&, E<3>&>;
+        STATIC_REQUIRE(std::same_as<decltype(std::declval<T&>().template get<E<3>>()), GetResult>);
+    });
+
+}
+
+TEST_CASE("varerr_status_constraints_visit", "[varerr][status]") {
 
     using R0 = varerr::Row<E<1>, E<3>, E<5>>;
     using B0 = varerr::status_from_row_t<UniverseE, R0>;
@@ -374,6 +384,95 @@ TEST_CASE("varerr_status_constraints_visit", "[varerr][status]") {
         using VisitInvoke = decltype(std::declval<T&>().visit(VisitorRefPassThruConstL {}));
         using VisitResult = const std::size_t&;
         STATIC_REQUIRE(std::same_as<VisitInvoke, VisitResult>);
+    });
+
+}
+
+TEST_CASE("varerr_status_noexcept_holds", "[varerr][status]") {
+
+    constexpr std::size_t kTestBound = 3;
+
+    iterate_index_sequence<kTestBound>([]<std::size_t I>(const index_constant<I>) -> void {
+        iterate_index_sequence<I>([]<std::size_t J>(const index_constant<J>) -> void {
+            if constexpr (I > 0) {
+                STATIC_REQUIRE(noexcept(std::declval<HomStatus<I>&>().template holds<E<J>>()));
+            }
+        });
+    });
+
+}
+
+TEST_CASE("varerr_status_noexcept_index", "[varerr][status]") {
+
+    constexpr std::size_t kTestBound = 3;
+
+    iterate_index_sequence<kTestBound>([]<std::size_t I>(const index_constant<I>) -> void {
+        if constexpr (I > 0) {
+            STATIC_REQUIRE(noexcept(std::declval<HomStatus<I>&>().index()));
+        }
+    });
+
+}
+
+TEST_CASE("varerr_status_noexcept_get_if", "[varerr][status]") {
+
+    constexpr std::size_t kTestBound = 3;
+
+    iterate_index_sequence<kTestBound>([]<std::size_t I>(const index_constant<I>) -> void {
+        iterate_index_sequence<I>([]<std::size_t J>(const index_constant<J>) -> void {
+            if constexpr (I > 0) {
+                STATIC_REQUIRE(noexcept(std::declval<HomStatus<I>&>().template get_if<E<J>>()));
+            }
+        });
+    });
+
+}
+
+TEST_CASE("varerr_status_noexcept_get", "[varerr][status]") {
+
+    constexpr std::size_t kTestBound = 3;
+
+    iterate_index_sequence<kTestBound>([]<std::size_t I>(const index_constant<I>) -> void {
+        iterate_index_sequence<I>([]<std::size_t J>(const index_constant<J>) -> void {
+            if constexpr (I > 0) {
+                STATIC_REQUIRE(noexcept(std::declval<HomStatus<I>&>().template get<E<J>>()));
+            }
+        });
+    });
+
+}
+
+TEST_CASE("varerr_status_noexcept_visit", "[varerr][status]") {
+
+    constexpr std::size_t kIndexTestBound = 7;
+
+    using R0 = varerr::Row<E<1>, E<3>, E<5>>;
+    using B0 = varerr::status_from_row_t<UniverseE, R0>;
+
+    // The visit is noexcept if the visitor is noexcept for every alternative.
+
+    iterate_index_sequence<kIndexTestBound>([]<std::size_t I>(index_constant<I>) -> void {
+        constexpr bool is_noexcept = noexcept(std::declval<B0&>().visit(VisitorThrowOnIndexConstL<I> {}));
+        constexpr bool is_alternative = varerr::row_elem_normalized_v<UniverseE, E<I>, R0>;
+        STATIC_REQUIRE(is_noexcept == !is_alternative);
+    });
+
+    // The noexcept specification is sensitive to constness.
+
+    iterate_cref_matrix<B0>([]<typename T>(std::type_identity<T>) -> void {
+        constexpr bool is_noexcept = noexcept(std::declval<T>().visit(VisitorThrowOnConstL {}));
+        constexpr bool is_throwing = std::is_lvalue_reference_v<T> && std::is_const_v<std::remove_reference_t<T>>;
+        STATIC_REQUIRE(is_noexcept == !is_throwing);
+    });
+
+    // The noexcept specification is sensitive to value category. Note that T&&
+    // is required because both T and T&& bind to the rvalue overload but plain
+    // T is not an rvalue reference (i.e., std::is_rvalue_reference_v is false).
+
+    iterate_cref_matrix<B0>([]<typename T>(std::type_identity<T>) -> void {
+        constexpr bool is_noexcept = noexcept(std::declval<T>().visit(VisitorThrowOnR {}));
+        constexpr bool is_throwing = std::is_rvalue_reference_v<T&&> && !std::is_const_v<std::remove_reference_t<T>>;
+        STATIC_REQUIRE(is_noexcept == !is_throwing);
     });
 
 }

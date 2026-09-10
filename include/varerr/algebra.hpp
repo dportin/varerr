@@ -138,6 +138,18 @@ struct row_size<Row<Es...>> : std::integral_constant<std::size_t, sizeof...(Es)>
 template <IsRow U>
 inline constexpr std::size_t row_size_v = detail::row_size<std::remove_cvref_t<U>>::value;
 
+template <typename... Es>
+concept IsEmptyPack = sizeof...(Es) == 0;
+
+template <typename... Es>
+concept IsNonEmptyPack = sizeof...(Es) > 0;
+
+template <typename U>
+concept IsEmptyRow = IsRow<U> && (row_size_v<U> == 0);
+
+template <typename U>
+concept IsNonEmptyRow = IsRow<U> && (row_size_v<U> > 0);
+
 namespace detail {
 
 // Transform a parameter pack into an array of ranks.

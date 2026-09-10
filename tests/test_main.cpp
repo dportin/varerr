@@ -95,6 +95,28 @@ using namespace varerr::tests::universe;
 
 // }
 
+
+TEST_CASE("diagnose_visit_called_on_empty_status", "[remove]") {
+
+    using R0 = varerr::Result<UniverseE, short>;
+    using R1 = varerr::Result<UniverseE, int>;
+    using R2 = varerr::Result<UniverseE, short, E<0>>;
+
+    R0 result0 { 0 };
+    R2 result1 = result0.and_then([](short n) -> R2 { return R2(n + 1); });
+
+    REQUIRE(result1.has_value());
+    REQUIRE(result1.value() == 1);
+
+    R1 result2 = result0.transform([](short n) -> int { return static_cast<int>(n) + 1; });
+
+    REQUIRE(result2.has_value());
+    REQUIRE(result2.value() == 1);
+
+    // R1 result2 = result0.transform([](short n) -> )
+
+}
+
 TEST_CASE("result_error_functional_deduction", "[result][error][functional]") {
 
     auto infer0 = varerr::Error(static_cast<short>(4));

@@ -308,8 +308,13 @@ struct BasicResult final {
         using InvokeF = std::remove_cvref_t<detail::forwarding_voidable_invoke_result_t<F, Self, T>>; /* decayed */
         using ResultF = BasicResult<M, InvokeF, Es...>;
 
-        if (self.has_error()) [[unlikely]] {
-            return ResultF(std::unexpect, std::forward<Self>(self).status());
+        // The constexpr guard is required to prevent the compiler from attempt-
+        // ing to type-check a call to status() with an uninhabited BasicStatus.
+
+        if constexpr (IsNonEmptyRow<Row<Es...>>) {
+            if (self.has_error()) [[unlikely]] {
+                return ResultF(std::unexpect, std::forward<Self>(self).status());
+            }
         }
 
         const auto invoke = [&f, &self]() -> decltype(auto) /* decayed */ {
@@ -347,8 +352,14 @@ struct BasicResult final {
         using StatusF = status_from_normalized_row_t<M, ErrRowF>;
         using ResultF = result_rebind_t<InvokeF, result_value_t<InvokeF>, ErrRowF>;
 
-        if (self.has_error()) [[unlikely]] {
-            return ResultF(std::unexpect, StatusF(std::forward<Self>(self).status()));
+        // The constexpr guard is required to prevent the compiler from attempt-
+        // ing to type-check a call to the widening constructor with an uninhab-
+        // ited BasicStatus.
+
+        if constexpr (IsNonEmptyRow<Row<Es...>>) {
+            if (self.has_error()) [[unlikely]] {
+                return ResultF(std::unexpect, StatusF(std::forward<Self>(self).status()));
+            }
         }
 
         if constexpr (std::is_void_v<T>) {
@@ -362,7 +373,9 @@ struct BasicResult final {
     // The handle (and_then/bind on the error row) combinator.
 
     template <IsTriviallyStorable... Fs, typename Self, typename H>
-    requires (sizeof...(Fs) > 0) && IsRankedPack<M, Fs...>
+    requires IsNonEmptyRow<Row<Es...>> &&
+             IsNonEmptyPack<Fs...> &&
+             IsRankedPack<M, Fs...>
     [[nodiscard]] auto /* prvalue */ handle(this Self&& self, H&& h) {
 
         // If the handler handles a single alternative we have:
@@ -437,6 +450,7 @@ struct BasicResult final {
     using ResultType = std::expected<ValueType, ErrorType>;
 
     template <typename Self>
+    requires IsNonEmptyRow<Row<Es...>>
     [[nodiscard]] constexpr decltype(auto) status(this Self&& self) noexcept {
         assert(self.has_error());
         return std::forward<Self>(self).result_.error();

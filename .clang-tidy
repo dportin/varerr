@@ -34,8 +34,10 @@ Checks: >
   -readability-magic-numbers,
   -readability-math-missing-parentheses,
   -readability-named-parameter,
+  -readability-redundant-lambda-parameter-list,
   -readability-redundant-member-init,
   -readability-redundant-typename,
+  -readability-trailing-comma,
   -readability-use-concise-preprocessor-directives,
 
   -cppcoreguidelines-pro-bounds-avoid-unchecked-container-access,

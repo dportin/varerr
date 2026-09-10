@@ -116,6 +116,7 @@ template <std::size_t N, IsStorage S>
 requires (N < storage_size_v<S>)
 [[nodiscard]] constexpr decltype(auto) storage_get(S&& storage) noexcept {
     if constexpr (N == 0) {
+        // NOLINTNEXTLINE(readability-redundant-parentheses)
         return (std::forward<S>(storage).head_); /* deduce reference */
     } else {
         return storage_get<N - 1>(std::forward<S>(storage).tail_);

@@ -23,7 +23,7 @@
 
 namespace varerr {
 
-// Determine whether the contents of a parameter pack are trivially storable.
+// Determine whether a Row carries a trivially storable parameter pack.
 
 namespace detail {
 
@@ -116,8 +116,8 @@ template <std::size_t N>
 using status_discriminator_t = decltype(detail::status_discriminator_impl<N>())::type;
 
 // A visitor V is valid with respect to a parameter pack Es if V is invocable at
-// and has a uniform return type for all alternatives E in Es. The returned type
-// tracks the const qualifier on the Self parameter.
+// and has a uniform return type for all alternatives E in Es. The concepts tra-
+// ck the const qualifier on the Self parameter.
 
 template <typename Self, typename E>
 using visitor_argument_t = transfer_const_t<Self, E>&;
@@ -131,8 +131,8 @@ concept IsVisitorInvocableLike = (std::is_invocable_v<V, visitor_argument_t<Self
 template <typename Self, typename V, typename... Es>
 concept IsVisitorUniformLike = IsVisitorInvocableLike<Self, V, Es...> && is_uniform_v<visitor_invoke_result_t<Self, V, Es>...>;
 
-template <typename Self, typename V, typename... Es>
-concept IsVisitorValidLike = IsVisitorInvocableLike<Self, V, Es...> && IsVisitorUniformLike<Self, V, Es...>;
+template <typename Self, typename V, typename E>
+concept IsVisitorNothrowInvocableWithLike = std::is_nothrow_invocable_v<V, visitor_argument_t<Self, E>>;
 
 // The BasicStatus class is parameterized by a normalized row of trivially stor-
 // able types. Trivial storability implies that every alternative is cvref-unqu-
@@ -212,7 +212,8 @@ struct BasicStatus final {
     // invariants make the constructor unconditionally noexcept.
 
     template <IsTriviallyStorable... Fs>
-    requires IsNormalizedPack<M, Fs...> &&
+    requires IsNonEmptyRow<Row<Fs...>> &&
+             IsNormalizedPack<M, Fs...> &&
              row_proper_subset_normalized_v<M, Row<Fs...>, Row<Es...>>
     constexpr BasicStatus(const BasicStatus<M, Fs...>& other) noexcept {
         other.visit([this]<typename E>(const E& e) -> void {
@@ -272,17 +273,18 @@ struct BasicStatus final {
     }
 
     // Dispatch a visitor to the active member by index. The noexcept specifica-
-    // tion is more conservative than necessary but the loss of precision is on-
-    // ly relevant when the visitor differs on the const and non-const qualific-
-    // ation of a trivially copyable argument.
+    // tion asserts nothrow invocability across the entire error row and is thus
+    // more conservative than necessary.
 
     template <typename Self, typename F>
-    requires IsVisitorValidLike<Self, F, Es...>
+    requires IsVisitorUniformLike<Self, F, Es...>
     constexpr decltype(auto) visit(this Self& self, F&& f)
-    noexcept((std::is_nothrow_invocable_v<F, visitor_argument_t<Self, Es>> && ...)) {
+    noexcept((IsVisitorNothrowInvocableWithLike<Self, F, Es> && ...)) {
         return detail::dispatch<sizeof...(Es)>(
             self.discrim_,
-            [&]<std::size_t I>(std::integral_constant<std::size_t, I>) -> decltype(auto) {
+            [&]<std::size_t I>(std::integral_constant<std::size_t, I>)
+            noexcept(IsVisitorNothrowInvocableWithLike<Self, F, detail::pack_subscript_t<I, Es...>>)
+                -> decltype(auto) {
                 return std::forward<F>(f)(detail::storage_get<I>(self.storage_));
             }
         );

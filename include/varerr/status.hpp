@@ -235,7 +235,7 @@ struct BasicStatus final {
     // Return the index of the underlying storage for the active alternative.
     // The return type is always std::size_t (never the discriminator).
 
-    [[nodiscard]] constexpr std::size_t index() noexcept {
+    [[nodiscard]] constexpr std::size_t index() const noexcept {
         return static_cast<std::size_t>(this->discrim_);
     }
 

@@ -42,6 +42,126 @@ static_assert(std::same_as<HetStatus<0, 3>, varerr::Status<UniverseH>>);
 static_assert(std::same_as<HetStatus<1, 3>, varerr::Status<UniverseH, H<0, 3>>>);
 static_assert(std::same_as<HetStatus<2, 3>, varerr::Status<UniverseH, H<0, 3>, H<1, 3>>>);
 
+// Determine whether a call is well-formed.
+
+template <typename S, typename E>
+concept IsStatusHoldsWellFormed = requires {
+    std::declval<S>().template holds<E>();
+};
+
+template <typename S, typename E>
+concept IsStatusGetWellFormed = requires {
+    std::declval<S>().template get<E>();
+};
+
+template <typename S, typename E>
+concept IsStatusGetIfWellFormed = requires {
+    std::declval<S>().template get_if<E>();
+};
+
+template <typename S>
+concept IsStatusIndexWellFormed = requires {
+    std::declval<S>().index();
+};
+
+template <typename S, typename V>
+concept IsStatusVisitWellFormed = requires {
+    std::declval<S>().visit(std::declval<V>());
+};
+
+// VisitorVoidConstL binds every value type.
+
+struct VisitorVoidL {
+    [[maybe_unused]] void operator()(auto&) const noexcept {}
+};
+
+struct VisitorVoidConstL {
+    [[maybe_unused]] void operator()(const auto&) const noexcept {}
+};
+
+struct VisitorVoidR {
+    [[maybe_unused]] void operator()(auto&&) const noexcept {}
+};
+
+struct VisitorVoidConstR {
+    [[maybe_unused]] void operator()(const auto&&) const noexcept {}
+};
+
+struct VisitorNonUniformL {
+    [[maybe_unused]] auto operator()(auto& e) const noexcept { return e; }
+};
+
+struct VisitorNonUniformConstL {
+    [[maybe_unused]] auto operator()(const auto& e) const noexcept { return e; }
+};
+
+struct VisitorNonUniformR {
+    [[maybe_unused]] auto operator()(auto&& e) const noexcept { return e; }
+};
+
+struct VisitorNonUniformConstR {
+    [[maybe_unused]] auto operator()(const auto&& e) const noexcept { return e; }
+};
+
+struct VisitorUniformL {
+    [[maybe_unused]] std::size_t operator()(auto& e) const noexcept { return e.value(); }
+};
+
+struct VisitorUniformConstL {
+    [[maybe_unused]] std::size_t operator()(const auto& e) const noexcept { return e.value(); }
+};
+
+struct VisitorUniformR {
+    [[maybe_unused]] std::size_t operator()(auto&& e) const noexcept { return e.value(); }
+};
+
+struct VisitorUniformConstR {
+    [[maybe_unused]] std::size_t operator()(const auto&& e) const noexcept { return e.value(); }
+};
+
+template <std::size_t I>
+struct VisitorVoidPartialL {
+    [[maybe_unused]] void operator()(E<I>&) const noexcept {}
+};
+
+template <std::size_t I>
+struct VisitorVoidPartialConstL {
+    [[maybe_unused]] void operator()(const E<I>&) const noexcept {}
+};
+
+template <std::size_t I>
+struct VisitorVoidPartialR {
+    [[maybe_unused]] void operator()(E<I>&&) const noexcept {}
+};
+
+template <std::size_t I>
+struct VisitorVoidPartialConstR {
+    [[maybe_unused]] void operator()(const E<I>&&) const noexcept {}
+};
+
+
+// Check whether the reference propagates through visit.
+
+struct VisitorRefPassThruL {
+    [[maybe_unused]] decltype(auto) operator()(auto& e) const noexcept { return (e.value_); }
+};
+
+struct VisitorRefPassThruConstL {
+    [[maybe_unused]] decltype(auto) operator()(const auto& e) const noexcept { return (e.value_); }
+};
+
+// struct TestVisitorUniform {
+//     std::size_t operator()(const auto& e) const noexcept { return e.value_; }
+// };
+
+// struct TestVisitorPartial {
+//     void operator()(const E<0>&) const noexcept {}
+// };
+
+// struct TestVisitorNonUniform {
+//     void operator()(const auto& e) const noexcept { return e; }
+// };
+
 } // namespace
 
 TEMPLATE_TEST_CASE("varerr_status_trivial", "[varerr][status]",
@@ -50,7 +170,7 @@ TEMPLATE_TEST_CASE("varerr_status_trivial", "[varerr][status]",
 
     using TrivialStatus = varerr::Status<UniverseI, TrivialType>;
 
-    // BasicStatus<M, Es...> inherits triviality from Storage.
+    // BasicStatus inherits triviality from Storage.
 
     STATIC_REQUIRE(std::is_trivially_copyable_v<TestType>);
     STATIC_REQUIRE(std::is_trivially_destructible_v<TestType>);
@@ -59,7 +179,7 @@ TEMPLATE_TEST_CASE("varerr_status_trivial", "[varerr][status]",
     STATIC_REQUIRE(std::is_trivially_copy_assignable_v<TestType>);
     STATIC_REQUIRE(std::is_trivially_move_assignable_v<TestType>);
 
-    // BasicStatus<M, Es...> is never trivially default constructible.
+    // BasicStatus is never trivially default constructible.
 
     STATIC_REQUIRE_FALSE(std::is_trivially_default_constructible_v<HomStatus<1>>);
     STATIC_REQUIRE_FALSE(std::is_trivially_default_constructible_v<TrivialStatus>);
@@ -70,12 +190,11 @@ TEST_CASE("varerr_status_construct_default", "[varerr][status]") {
 
     using NoDefaultStatus = varerr::Status<UniverseI, NoDefaultConstructType>;
 
-    // BasicStatus<M> is never constructible.
+    // The empty BasicStatus is never constructible.
 
     STATIC_REQUIRE_FALSE(std::is_default_constructible_v<HomStatus<0>>);
-    STATIC_REQUIRE_FALSE(std::is_default_constructible_v<HetStatus<0, 3>>);
 
-    // BasicStatus<M, Es...> inherits default constructibility from Es...
+    // A non-empty BasicStatus inherits constructibility from its alternatives.
 
     STATIC_REQUIRE(std::is_default_constructible_v<HomStatus<1>>);
     STATIC_REQUIRE_FALSE(std::is_default_constructible_v<NoDefaultStatus>);
@@ -94,25 +213,6 @@ TEST_CASE("varerr_status_construct_widen", "[varerr][status]") {
     REQUIRE(false);
 }
 
-namespace {
-
-template <typename S, typename E>
-concept IsStatusHoldsWellFormed = requires {
-    std::declval<S>().template holds<E>();
-};
-
-template <typename S, typename E>
-concept IsStatusGetWellFormed = requires {
-    std::declval<S>().template get<E>();
-};
-
-template <typename S, typename E>
-concept IsStatusGetIfWellFormed = requires {
-    std::declval<S>().template get_if<E>();
-};
-
-} // namespace
-
 
 TEST_CASE("varerr_status_constraints_holds", "[varerr][status]") {
 
@@ -123,21 +223,38 @@ TEST_CASE("varerr_status_constraints_holds", "[varerr][status]") {
 
     // The error row must be non-empty.
 
-    iterate_cvref_matrix<HomStatus<0>>([]<typename T>(const std::type_identity<T>) -> void {
-        STATIC_REQUIRE_FALSE(IsStatusHoldsWellFormed<T, E<0>>);
-        STATIC_REQUIRE_FALSE(IsStatusHoldsWellFormed<T, E<1>>);
-    });
+    STATIC_REQUIRE_FALSE(IsStatusHoldsWellFormed<HomStatus<0>&, E<0>>);
 
     // The element must be a member of the error row.
 
     iterate_index_sequence<kTestIndexBound>([]<std::size_t I>(const index_constant<I>) -> void {
-        STATIC_REQUIRE(IsStatusHoldsWellFormed<B0&, E<I>> == varerr::row_elem_normalized_v<UniverseE, E<I>, R0>);
+        constexpr bool well_formed = varerr::row_elem_normalized_v<UniverseE, E<I>, R0>;
+        STATIC_REQUIRE(IsStatusHoldsWellFormed<B0&, E<I>> == well_formed);
     });
 
     // Only volatile references are prohibited.
 
     iterate_cvref_matrix<B0>([]<typename T>(const std::type_identity<T>) -> void {
-        STATIC_REQUIRE(IsStatusHoldsWellFormed<T, E<1>> == !std::is_volatile_v<std::remove_reference_t<T>>);
+        constexpr bool well_formed = !std::is_volatile_v<std::remove_reference_t<T>>;
+        STATIC_REQUIRE(IsStatusHoldsWellFormed<T, E<1>> == well_formed);
+    });
+
+}
+
+TEST_CASE("varerr_status_constraints_index", "[varerr][status]") {
+
+    using R0 = varerr::Row<E<1>, E<3>, E<5>>;
+    using B0 = varerr::status_from_row_t<UniverseE, R0>;
+
+    // The error row must be non-empty.
+
+    STATIC_REQUIRE_FALSE(IsStatusIndexWellFormed<HomStatus<0>&>);
+
+    // Only volatile references are prohibited.
+
+    iterate_cvref_matrix<B0>([]<typename T>(const std::type_identity<T>) -> void {
+        constexpr bool well_formed = !std::is_volatile_v<std::remove_reference_t<T>>;
+        STATIC_REQUIRE(IsStatusIndexWellFormed<T> == well_formed);
     });
 
 }
@@ -151,15 +268,13 @@ TEST_CASE("varerr_status_constraints_get", "[varerr][status]") {
 
     // The error row must be non-empty.
 
-    iterate_cvref_matrix<HomStatus<0>>([]<typename T>(const std::type_identity<T>) -> void {
-        STATIC_REQUIRE_FALSE(IsStatusGetWellFormed<T, E<0>>);
-        STATIC_REQUIRE_FALSE(IsStatusGetWellFormed<T, E<1>>);
-    });
+    STATIC_REQUIRE_FALSE(IsStatusGetWellFormed<HomStatus<0>&, E<0>>);
 
     // The element must be a member of the error row.
 
     iterate_index_sequence<kTestIndexBound>([]<std::size_t I>(const index_constant<I>) -> void {
-        STATIC_REQUIRE(IsStatusGetWellFormed<B0&, E<I>> == varerr::row_elem_normalized_v<UniverseE, E<I>, R0>);
+        constexpr bool well_formed = varerr::row_elem_normalized_v<UniverseE, E<I>, R0>;
+        STATIC_REQUIRE(IsStatusGetWellFormed<B0&, E<I>> == well_formed);
     });
 
     // Only non-volatile lvalue references are permitted.
@@ -172,10 +287,8 @@ TEST_CASE("varerr_status_constraints_get", "[varerr][status]") {
     // The returned reference tracks the constness of the status object.
 
     iterate_const_matrix<B0>([]<typename T>(const std::type_identity<T>) -> void {
-        STATIC_REQUIRE(std::same_as<
-            decltype(std::declval<T&>().template get<E<3>>()),
-            std::conditional_t<std::is_const_v<T>, const E<3>&, E<3>&>
-        >);
+        using GetResult = std::conditional_t<std::is_const_v<T>, const E<3>&, E<3>&>;
+        STATIC_REQUIRE(std::same_as<decltype(std::declval<T&>().template get<E<3>>()), GetResult>);
     });
 
 }
@@ -189,15 +302,13 @@ TEST_CASE("varerr_status_constraints_get_if", "[varerr][status]") {
 
     // The error row must be non-empty.
 
-    iterate_cvref_matrix<HomStatus<0>>([]<typename T>(const std::type_identity<T>) -> void {
-        STATIC_REQUIRE_FALSE(IsStatusGetIfWellFormed<T, E<0>>);
-        STATIC_REQUIRE_FALSE(IsStatusGetIfWellFormed<T, E<1>>);
-    });
+    STATIC_REQUIRE_FALSE(IsStatusGetIfWellFormed<HomStatus<0>&, E<0>>);
 
     // The element must be a member of the error row.
 
     iterate_index_sequence<kTestIndexBound>([]<std::size_t I>(const index_constant<I>) -> void {
-        STATIC_REQUIRE(IsStatusGetIfWellFormed<B0&, E<I>> == varerr::row_elem_normalized_v<UniverseE, E<I>, R0>);
+        constexpr bool well_formed = varerr::row_elem_normalized_v<UniverseE, E<I>, R0>;
+        STATIC_REQUIRE(IsStatusGetIfWellFormed<B0&, E<I>> == well_formed);
     });
 
     // Only non-volatile lvalue references are permitted.
@@ -210,18 +321,59 @@ TEST_CASE("varerr_status_constraints_get_if", "[varerr][status]") {
     // The returned pointer tracks the constness of the status object.
 
     iterate_const_matrix<B0>([]<typename T>(const std::type_identity<T>) -> void {
-        STATIC_REQUIRE(std::same_as<
-            decltype(std::declval<T&>().template get_if<E<3>>()),
-            std::conditional_t<std::is_const_v<T>, const E<3>*, E<3>*>
-        >);
+        using GetIfResult = std::conditional_t<std::is_const_v<T>, const E<3>*, E<3>*>;
+        STATIC_REQUIRE(std::same_as<decltype(std::declval<T&>().template get_if<E<3>>()), GetIfResult>);
     });
 
 }
 
-
-
 TEST_CASE("varerr_status_constraints_visit", "[varerr][status]") {
 
-    REQUIRE(false);
+    // constexpr std::size_t kTestIndexBound = 7;
+
+    using R0 = varerr::Row<E<1>, E<3>, E<5>>;
+    using B0 = varerr::status_from_row_t<UniverseE, R0>;
+
+    // The error row must be non-empty.
+
+    STATIC_REQUIRE_FALSE(IsStatusVisitWellFormed<HomStatus<0>&, VisitorVoidConstL>);
+
+    // Only volatile references are prohibited.
+
+    iterate_cvref_matrix<B0>([]<typename T>(const std::type_identity<T>) -> void {
+        constexpr bool well_formed = !std::is_volatile_v<std::remove_reference_t<T>>;
+        STATIC_REQUIRE(IsStatusVisitWellFormed<T, VisitorVoidConstL> == well_formed);
+    });
+
+    // Non-uniform visitors are rejected.
+
+    STATIC_REQUIRE(IsStatusVisitWellFormed<HomStatus<2>&, VisitorUniformConstL>);
+    STATIC_REQUIRE_FALSE(IsStatusVisitWellFormed<HomStatus<2>&, VisitorNonUniformConstL>);
+
+    // Partial visitors are rejected.
+
+    STATIC_REQUIRE(IsStatusVisitWellFormed<HomStatus<1>&, VisitorVoidPartialConstL<0>>);
+    STATIC_REQUIRE_FALSE(IsStatusVisitWellFormed<HomStatus<2>&, VisitorVoidPartialConstL<0>>);
+
+    // The value category bound by the visitor is determined by the BasicStatus.
+
+    STATIC_REQUIRE(IsStatusVisitWellFormed<B0&, VisitorVoidR>); /* auto&& */
+    STATIC_REQUIRE(IsStatusVisitWellFormed<B0&&, VisitorVoidR>); /* auto&& */
+    STATIC_REQUIRE(IsStatusVisitWellFormed<B0&, VisitorVoidL>); /* auto& */
+    STATIC_REQUIRE_FALSE(IsStatusVisitWellFormed<B0&&, VisitorVoidL>); /* auto& */
+
+    // References propagate through the visitor dispatch chain.
+
+    iterate_const_matrix<B0>([]<typename T>(const std::type_identity<T>) -> void {
+        using VisitInvoke = decltype(std::declval<T&>().visit(VisitorRefPassThruL {}));
+        using VisitResult = std::conditional_t<std::is_const_v<T>, const std::size_t&, std::size_t&>;
+        STATIC_REQUIRE(std::same_as<VisitInvoke, VisitResult>);
+    });
+
+    iterate_const_matrix<B0>([]<typename T>(const std::type_identity<T>) -> void {
+        using VisitInvoke = decltype(std::declval<T&>().visit(VisitorRefPassThruConstL {}));
+        using VisitResult = const std::size_t&;
+        STATIC_REQUIRE(std::same_as<VisitInvoke, VisitResult>);
+    });
 
 }

@@ -94,11 +94,53 @@ TEST_CASE("varerr_status_construct_widen", "[varerr][status]") {
     REQUIRE(false);
 }
 
+namespace {
+
+template <typename S, typename E>
+concept IsStatusHoldsWellFormed = requires {
+    std::declval<S>().template holds<E>();
+};
 
 template <typename S, typename E>
 concept IsStatusGetWellFormed = requires {
     std::declval<S>().template get<E>();
 };
+
+template <typename S, typename E>
+concept IsStatusGetIfWellFormed = requires {
+    std::declval<S>().template get_if<E>();
+};
+
+} // namespace
+
+
+TEST_CASE("varerr_status_constraints_holds", "[varerr][status]") {
+
+    constexpr std::size_t kTestIndexBound = 7;
+
+    using R0 = varerr::Row<E<1>, E<3>, E<5>>;
+    using B0 = varerr::status_from_row_t<UniverseE, R0>;
+
+    // The error row must be non-empty.
+
+    iterate_cvref_matrix<HomStatus<0>>([]<typename T>(const std::type_identity<T>) -> void {
+        STATIC_REQUIRE_FALSE(IsStatusHoldsWellFormed<T, E<0>>);
+        STATIC_REQUIRE_FALSE(IsStatusHoldsWellFormed<T, E<1>>);
+    });
+
+    // The element must be a member of the error row.
+
+    iterate_index_sequence<kTestIndexBound>([]<std::size_t I>(const index_constant<I>) -> void {
+        STATIC_REQUIRE(IsStatusHoldsWellFormed<B0&, E<I>> == varerr::row_elem_normalized_v<UniverseE, E<I>, R0>);
+    });
+
+    // Only volatile references are prohibited.
+
+    iterate_cvref_matrix<B0>([]<typename T>(const std::type_identity<T>) -> void {
+        STATIC_REQUIRE(IsStatusHoldsWellFormed<T, E<1>> == !std::is_volatile_v<std::remove_reference_t<T>>);
+    });
+
+}
 
 TEST_CASE("varerr_status_constraints_get", "[varerr][status]") {
 
@@ -138,11 +180,6 @@ TEST_CASE("varerr_status_constraints_get", "[varerr][status]") {
 
 }
 
-template <typename S, typename E>
-concept IsStatusGetIfWellFormed = requires {
-    std::declval<S>().template get_if<E>();
-};
-
 TEST_CASE("varerr_status_constraints_get_if", "[varerr][status]") {
 
     constexpr std::size_t kTestIndexBound = 7;
@@ -180,6 +217,8 @@ TEST_CASE("varerr_status_constraints_get_if", "[varerr][status]") {
     });
 
 }
+
+
 
 TEST_CASE("varerr_status_constraints_visit", "[varerr][status]") {
 

@@ -227,11 +227,9 @@ struct BasicStatus final {
     // Determine whether E is the active alternative.
 
     template <typename E>
+    requires row_elem_normalized_v<M, E, Row<Es...>>
     [[nodiscard]] constexpr bool holds() const noexcept {
-        if constexpr (row_elem_normalized_v<M, E, Row<Es...>>) {
-            return this->discrim_ == static_cast<DiscrimType>(row_index_normalized_v<M, E, Row<Es...>>);
-        }
-        return false;
+        return this->discrim_ == static_cast<DiscrimType>(row_index_normalized_v<M, E, Row<Es...>>);
     }
 
     // Return the index of the underlying storage for the active alternative.

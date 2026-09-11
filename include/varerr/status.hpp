@@ -177,7 +177,7 @@ struct BasicStatus final {
     static_assert((std::is_nothrow_move_constructible_v<Es> && ...),
         "BasicStatus: alternatives must be nothrow move-constructible");
 
-    // The default constructor value-constructs the first alternative.
+    // The default constructor default-constructs the first alternative.
 
     constexpr BasicStatus()
     noexcept(std::is_nothrow_default_constructible_v<DefaultType>)
@@ -318,7 +318,7 @@ struct BasicStatus<M> final {
 
 };
 
-// Destructure BasicStatus into its components.s
+// Destructure BasicStatus into its components.
 
 namespace detail {
 

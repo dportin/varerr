@@ -199,7 +199,7 @@ TEMPLATE_TEST_CASE("varerr_status_trivial", "[varerr][status]",
 
 }
 
-TEST_CASE("varerr_status_construct_default", "[varerr][status]") {
+TEST_CASE("varerr_status_construct_empty", "[varerr][status]") {
 
     using NoDefaultStatus = varerr::Status<UniverseI, NoDefaultConstructType>;
 
@@ -214,8 +214,19 @@ TEST_CASE("varerr_status_construct_default", "[varerr][status]") {
 
 }
 
-TEST_CASE("varerr_status_construct", "[varerr][status]") {
-    REQUIRE(false);
+TEST_CASE("varerr_status_construct_default", "[varerr][status]") {
+
+    using R0 = varerr::Row<E<3>, E<1>>;
+    using B0 = varerr::status_from_row_t<UniverseE, R0>;
+
+    // The default constructor default-constructs the first alternative.
+
+    constexpr B0 status {};
+
+    STATIC_REQUIRE(status.holds<E<1>>());
+    STATIC_REQUIRE(status.get<E<1>>().value() == 0);
+    STATIC_REQUIRE(status.index() == 0);
+
 }
 
 TEST_CASE("varerr_status_construct_emplace", "[varerr][status]") {
@@ -223,6 +234,32 @@ TEST_CASE("varerr_status_construct_emplace", "[varerr][status]") {
 }
 
 TEST_CASE("varerr_status_construct_widen", "[varerr][status]") {
+    REQUIRE(false);
+}
+
+TEST_CASE("varerr_status_constraints_default", "[varerr][status]") {
+
+    using RowDefCon = varerr::Row<E<0>, NoDefaultConstructType>;
+    using RowNotDefCon = varerr::Row<NoDefaultConstructType, E<0>>;
+
+    struct UniDefCon : pack_apply_t<bind_adapter<UniverseT>, RowDefCon> {};
+    struct UniNotDefCon : pack_apply_t<bind_adapter<UniverseT>, RowNotDefCon> {};
+
+    using StatusDefCon = varerr::status_from_row_t<UniDefCon, RowDefCon>;
+    using StatusNotDefCon = varerr::status_from_row_t<UniNotDefCon, RowNotDefCon>;
+
+    // BasicStatus inherits default constructibility from the first alternative.
+
+    STATIC_REQUIRE(std::is_default_constructible_v<StatusDefCon>);
+    STATIC_REQUIRE_FALSE(std::is_default_constructible_v<StatusNotDefCon>);
+
+}
+
+TEST_CASE("varerr_status_constraints_emplace", "[varerr][status]") {
+    REQUIRE(false);
+}
+
+TEST_CASE("varerr_status_constraints_widen", "[varerr][status]") {
     REQUIRE(false);
 }
 
@@ -386,6 +423,33 @@ TEST_CASE("varerr_status_constraints_visit", "[varerr][status]") {
         STATIC_REQUIRE(std::same_as<VisitInvoke, VisitResult>);
     });
 
+}
+
+TEST_CASE("varerr_status_noexcept_default", "[varerr][status]") {
+
+    using RowDefCon = varerr::Row<E<0>, DefaultThrowType>;
+    using RowThrowDefCon = varerr::Row<DefaultThrowType, E<0>>;
+
+    struct UniDefCon : pack_apply_t<bind_adapter<UniverseT>, RowDefCon> {};
+    struct UniThrowDefCon : pack_apply_t<bind_adapter<UniverseT>, RowThrowDefCon> {};
+
+    using StatusDefCon = varerr::status_from_row_t<UniDefCon, RowDefCon>;
+    using StatusThrowDefCon = varerr::status_from_row_t<UniThrowDefCon, RowThrowDefCon>;
+
+    // BasicStatus inherits nothrow default constructibility from its first al-
+    // ternative.
+
+    STATIC_REQUIRE(std::is_nothrow_default_constructible_v<StatusDefCon>);
+    STATIC_REQUIRE_FALSE(std::is_nothrow_default_constructible_v<StatusThrowDefCon>);
+
+}
+
+TEST_CASE("varerr_status_noexcept_emplace", "[varerr][status]") {
+    REQUIRE(false);
+}
+
+TEST_CASE("varerr_status_noexcept_widen", "[varerr][status]") {
+    REQUIRE(false);
 }
 
 TEST_CASE("varerr_status_noexcept_holds", "[varerr][status]") {

@@ -354,6 +354,16 @@ struct ConditionalThrowType {
 static_assert(std::is_nothrow_constructible_v<ConditionalThrowType, int>);
 static_assert(!std::is_nothrow_constructible_v<ConditionalThrowType, double>);
 
+// Distinguish throwing from non-throwing default constructor.
+
+struct DefaultThrowType {
+    int value_;
+    DefaultThrowType() : value_ {} {}
+};
+
+static_assert(std::is_default_constructible_v<DefaultThrowType>);
+static_assert(!std::is_nothrow_default_constructible_v<DefaultThrowType>);
+
 // Track the value category of forwarded arguments. The forwarding constructors
 // are constrained to the cvref-unqualified type to prevent hijacking the copy
 // and move constructors (so the class remains trivially copyable).
@@ -406,31 +416,34 @@ static_assert(std::is_trivially_copyable_v<ForwardProbeType>);
 static_assert(std::is_trivially_copy_constructible_v<ForwardProbeType>);
 static_assert(std::is_trivially_move_constructible_v<ForwardProbeType>);
 
-struct UniverseI {
+template <typename... Es>
+struct UniverseT {
 
-    using RankedTypes = type_pack_t<
-        TrivialType,
-        NoCopyConstructType,
-        NoCopyAssignType,
-        NoMoveConstructType,
-        NoMoveAssignType,
-        NonTrivialConstructType,
-        NonTrivialDestructType,
-        NonTrivialCopyConstructType,
-        NonTrivialCopyAssignType,
-        NonTrivialMoveConstructType,
-        NonTrivialMoveAssignType,
-        NoDefaultConstructType,
-        NonStandardLayoutType,
-        ConditionalThrowType,
-        ForwardProbeType
-    >;
+    using RankedTypes = type_pack_t<Es...>;
 
     template <typename T>
     requires pack_member_v<std::remove_cvref_t<T>, RankedTypes>
     static constexpr std::size_t rank = pack_index_v<std::remove_cvref_t<T>, RankedTypes>;
 
 };
+
+struct UniverseI : UniverseT<
+    TrivialType,
+    NoCopyConstructType,
+    NoCopyAssignType,
+    NoMoveConstructType,
+    NoMoveAssignType,
+    NonTrivialConstructType,
+    NonTrivialDestructType,
+    NonTrivialCopyConstructType,
+    NonTrivialCopyAssignType,
+    NonTrivialMoveConstructType,
+    NonTrivialMoveAssignType,
+    NoDefaultConstructType,
+    NonStandardLayoutType,
+    ConditionalThrowType,
+    ForwardProbeType
+> {};
 
 } // namespace varerr::tests::universe
 

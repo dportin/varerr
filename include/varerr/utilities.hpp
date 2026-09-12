@@ -91,7 +91,7 @@ struct bind_meta_back_adapter {
     using bind = F<Es..., Args...>;
 };
 
-// The lift combinator lifts a parameterized type T to a metafunction.
+// The lift combinator lifts a parameterized type to a metafunction.
 
 template <typename F>
 struct bind_lift {

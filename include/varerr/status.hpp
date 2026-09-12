@@ -136,8 +136,9 @@ template <typename Self, typename V, typename E>
 concept IsVisitorNothrowInvocableWithLike = std::is_nothrow_invocable_v<V, visitor_argument_t<Self, E>>;
 
 // The BasicStatus class is parameterized by a normalized row of trivially stor-
-// able types. Trivial storability implies that every alternative is cvref-unqu-
-// alified. The Status alias is a normalizing constructor for BasicStatus.
+// able types with nothrow copy and move constructors. Trivial storability impl-
+// ies that every alternative is cvref-unqualified. Nothrow copy and move const-
+// ructibility make the widening constructor unconditionally noexcept.
 
 template <typename M, IsTriviallyStorable... Es>
 requires IsNormalizedPack<M, Es...>
@@ -201,16 +202,21 @@ struct BasicStatus final {
     // and at most wrong - when E is the BasicStatus type itself.
 
     template <typename E>
-    requires row_elem_normalized_v<M, std::remove_cvref_t<E>, Row<Es...>>
+    requires row_elem_normalized_v<M, E, Row<Es...>>
     constexpr BasicStatus(E&& e)
-    noexcept(std::is_nothrow_constructible_v<std::remove_cvref_t<E>, E>) :
-        BasicStatus(std::in_place_type<std::remove_cvref_t<E>>, std::forward<E>(e)) {}
+    noexcept(std::is_nothrow_constructible_v<E, E>) :
+        BasicStatus(std::in_place_type<E>, std::forward<E>(e)) {}
 
     // The widening constructor leaves the class members deliberately uninitial-
     // ized before invoking the visitor. P1331R2 permits uninitialized class me-
     // mbers in constexpr contexts provided that the uninitialized class members
     // are not read. The visitor writes each member before it returns. The class
     // invariants make the constructor unconditionally noexcept.
+
+    // The parameter is a const reference to BasicStatus<M, Fs...> rather than a
+    // forwarding reference since: (a) there are no move semantics as the alter-
+    // natives are trivially copyable; and (b) the forwarding pattern would req-
+    // uire destructuring and checking the universe and row.
 
     template <IsTriviallyStorable... Fs>
     requires IsNonEmptyRow<Row<Fs...>> &&
@@ -220,7 +226,7 @@ struct BasicStatus final {
         other.visit([this]<typename E>(const E& e) -> void {
             constexpr std::size_t I = row_index_normalized_v<M, E, Row<Es...>>;
             this->discrim_ = static_cast<DiscrimType>(I);
-            detail::storage_emplace<I>(this->storage_, e);
+            detail::storage_emplace<I>(this->storage_, e); /* copy */
         });
     }
 
@@ -318,23 +324,39 @@ struct BasicStatus<M> final {
 
 };
 
-// Destructure BasicStatus into its components.
+// The trait accessors do not strip cvref qualifiers because the error row is
+// constrained to trivially storable type.s
 
 namespace detail {
 
 template <typename S>
-struct status_row;
+struct status_traits;
 
 template <typename M, typename... Es>
-struct status_row<BasicStatus<M, Es...>> : std::type_identity<Row<Es...>> {};
-
-}
+struct status_traits<BasicStatus<M, Es...>> {
+    using UniverseType = M;
+    using RowType = Row<Es...>;
+};
 
 template <typename S>
-using status_row_t = detail::status_row<std::remove_cvref_t<S>>::type;
+constexpr bool is_status_exact_v = false;
 
-template <typename S, std::size_t I>
-using status_alternative_t = detail::row_subscript_t<I, status_row_t<S>>;
+template <typename M, typename... Es>
+constexpr bool is_status_exact_v<BasicStatus<M, Es...>> = true;
+
+} // namespace detail
+
+template <typename S>
+concept IsStatus = detail::is_status_exact_v<std::remove_cvref_t<S>>;
+
+template <IsStatus S>
+using status_row_t = detail::status_traits<std::remove_cvref_t<S>>::RowType;
+
+template <IsStatus S>
+using status_universe_t = detail::status_traits<std::remove_cvref_t<S>>::UniverseType;
+
+template <IsStatus S, std::size_t I>
+using status_alternative_t = detail::row_subscript_t<I, status_row_t<std::remove_cvref_t<S>>>;
 
 // Construct a BasicStatus from a normalized or non-normalized parameter pack.
 

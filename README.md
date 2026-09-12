@@ -32,6 +32,8 @@ Clang-Tidy is enabled for all configurations. IWYU is enabled only for Clang con
 
 ## TODO
 
+- Merge copy/move constructibility into `IsStatusType` concept and constrain `BasicStatus` with it.
+- Remove the forwarding constructor from `BasicStatus`.
 - Use consistent traits/concepts interface for function/member constraints.
 - Remove forwarding constructor from `BasicStatus`.
 - Refactor `status.hpp` and `result.hpp` tests.

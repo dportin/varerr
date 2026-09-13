@@ -1061,3 +1061,99 @@ TEST_CASE("varerr_status_memory_empty", "[varerr][status]") {
     STATIC_REQUIRE(alignof(HomStatus<0>) == 1);
 
 }
+
+// Functional tests.
+
+TEST_CASE("varerr_status_functional_holds", "[varerr][status]") {
+
+    using R0 = varerr::Row<E<1>, E<3>, E<5>>;
+    using B0 = varerr::status_from_row_t<UniverseE, R0>;
+
+    iterate_index_array<1, 3, 5>([]<std::size_t I>(const index_constant<I>) -> void {
+        constexpr B0 status { std::in_place_type<E<I>>, std::size_t {I + 42} };
+        iterate_index_array<1, 3, 5>([&]<std::size_t J>(const index_constant<J>) -> void {
+            STATIC_REQUIRE(status.holds<E<J>>() == (I == J));
+        });
+    });
+
+}
+
+TEST_CASE("varerr_status_functional_get_if", "[varerr][status]") {
+
+    using R0 = varerr::Row<E<1>, E<3>, E<5>>;
+    using B0 = varerr::status_from_row_t<UniverseE, R0>;
+
+    iterate_index_array<1, 3, 5>([]<std::size_t I>(const index_constant<I>) -> void {
+        iterate_index_array<1, 3, 5>([]<std::size_t J>(const index_constant<J>) -> void {
+            STATIC_REQUIRE([]() -> bool {
+                B0 status { std::in_place_type<E<I>>, std::size_t {I + 42} };
+                E<J>* pointer = status.get_if<E<J>>();
+                if (pointer) { pointer->value_++; }
+                return pointer == nullptr ? I != J : pointer->value() == I + 43;
+            }() == true);
+        });
+    });
+
+}
+
+TEST_CASE("varerr_status_functional_get", "[varerr][status]") {
+
+    using R0 = varerr::Row<E<1>, E<3>, E<5>>;
+    using B0 = varerr::status_from_row_t<UniverseE, R0>;
+
+    iterate_index_array<1, 3, 5>([]<std::size_t I>(const index_constant<I>) -> void {
+        STATIC_REQUIRE([]() -> bool {
+            B0 status { std::in_place_type<E<I>>, std::size_t {I + 42} };
+            E<I>& reference = status.get<E<I>>();
+            reference.value_++;
+            return reference.value() == I + 43;
+        }() == true);
+    });
+
+}
+
+TEST_CASE("varerr_status_functional_visit", "[varerr][status]") {
+
+    using R0 = varerr::Row<E<1>, E<3>, E<5>>;
+    using B0 = varerr::status_from_row_t<UniverseE, R0>;
+
+    // Visit the active alternative by value.
+
+    iterate_index_array<1, 3, 5>([]<std::size_t I>(const index_constant<I>) -> void {
+        STATIC_REQUIRE([]() -> std::size_t {
+            B0 status { std::in_place_type<E<I>>, std::size_t {I + 42} };
+            return status.visit([](const auto& e) -> std::size_t { return e.value(); });
+        }() == I + 42);
+    });
+
+    // Visit the active alternative by type.
+
+    iterate_index_array<1, 3, 5>([]<std::size_t I>(const index_constant<I>) -> void {
+        STATIC_REQUIRE([]() -> std::size_t {
+            B0 status { std::in_place_type<E<I>>, std::size_t {I + 42} };
+            return status.visit([]<typename A>(const A&) -> std::size_t {
+                return varerr::row_index_normalized_v<UniverseE, A, R0>;
+            });
+        }() == varerr::row_index_normalized_v<UniverseE, E<I>, R0>);
+    });
+
+    // The visitor is invoked exactly once.
+
+    iterate_index_array<1, 3, 5>([]<std::size_t I>(const index_constant<I>) -> void {
+        STATIC_REQUIRE([]() -> std::size_t {
+            B0 status { std::in_place_type<E<I>>, std::size_t {I + 42} };
+            status.visit([](auto& e) -> void { e.value_++; });
+            return status.get<E<I>>().value();
+        }() == I + 43);
+    });
+
+    iterate_index_array<1, 3, 5>([]<std::size_t I>(const index_constant<I>) -> void {
+        STATIC_REQUIRE([]() -> std::size_t {
+            B0 status { std::in_place_type<E<I>>, std::size_t {I + 42} };
+            std::size_t counter = 0;
+            status.visit([&](const auto&) -> void { ++counter; }); // NOLINT
+            return counter;
+        }() == 1);
+    });
+
+}

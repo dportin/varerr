@@ -16,20 +16,19 @@
 namespace varerr {
 
 template <typename E>
-concept IsStorable =
-    std::is_object_v<E> &&
-    !std::is_array_v<E> &&
-    std::same_as<E, std::remove_cv_t<E>>;
-
-// Trivial copyability implies trivial destructibility since every trivially co-
-// pyable class has a non-deleted trivial destructor. The requirement is repeat-
-// ed here for clarity.
+concept IsStorageQual = std::same_as<E, std::remove_cvref_t<E>>;
 
 template <typename E>
-concept IsTriviallyStorable =
-    IsStorable<E> &&
-    std::is_trivially_copyable_v<E> &&
-    std::is_trivially_destructible_v<E>;
+concept IsStorageType = std::is_object_v<E> && !std::is_array_v<E>;
+
+// Trivial copyability implies trivial destructibility since every trivially co-
+// pyable class has a non-deleted trivial destructor.
+
+template <typename E>
+concept IsStorable = IsStorageQual<E> && IsStorageType<E>;
+
+template <typename E>
+concept IsTriviallyStorable = IsStorable<E> && std::is_trivially_copyable_v<E>;
 
 namespace detail {
 

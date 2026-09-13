@@ -189,7 +189,8 @@ struct BasicStatus final {
     // Construct a BasicStatus from an alternative.
 
     template <typename E, typename... Args>
-    requires row_elem_normalized_v<M, E, Row<Es...>> &&
+    requires IsTriviallyStorable<E> &&
+             row_elem_normalized_v<M, E, Row<Es...>> &&
              std::constructible_from<E, Args...>
     constexpr explicit BasicStatus(std::in_place_type_t<E>, Args&&... args)
     noexcept(std::is_nothrow_constructible_v<E, Args...>) :
@@ -202,7 +203,7 @@ struct BasicStatus final {
     // and at most wrong - when E is the BasicStatus type itself.
 
     template <typename E>
-    requires row_elem_normalized_v<M, E, Row<Es...>>
+    requires row_elem_normalized_v<M, std::remove_cvref_t<E>, Row<Es...>>
     constexpr BasicStatus(E&& e)
     noexcept(std::is_nothrow_constructible_v<E, E>) :
         BasicStatus(std::in_place_type<E>, std::forward<E>(e)) {}
@@ -220,7 +221,7 @@ struct BasicStatus final {
 
     template <IsTriviallyStorable... Fs>
     requires IsNonEmptyRow<Row<Fs...>> &&
-             IsNormalizedPack<M, Fs...> &&
+             IsNormalizedRow<M, Row<Fs...>> &&
              row_proper_subset_normalized_v<M, Row<Fs...>, Row<Es...>>
     constexpr BasicStatus(const BasicStatus<M, Fs...>& other) noexcept {
         other.visit([this]<typename E>(const E& e) -> void {
@@ -233,7 +234,8 @@ struct BasicStatus final {
     // Determine whether E is the active alternative.
 
     template <typename E>
-    requires row_elem_normalized_v<M, E, Row<Es...>>
+    requires IsTriviallyStorable<E> &&
+             row_elem_normalized_v<M, E, Row<Es...>>
     [[nodiscard]] constexpr bool holds() const noexcept {
         return this->discrim_ == static_cast<DiscrimType>(row_index_normalized_v<M, E, Row<Es...>>);
     }
@@ -254,7 +256,8 @@ struct BasicStatus final {
     // active alternative. Returns nullptr if E is not the active alternative.
 
     template <typename E, typename Self>
-    requires IsNonVolatileLValueReference<Self> &&
+    requires IsTriviallyStorable<E> &&
+             IsNonVolatileLValueReference<Self> &&
              row_elem_normalized_v<M, E, Row<Es...>>
     // NOLINTNEXTLINE(cppcoreguidelines-missing-std-forward)
     [[nodiscard]] constexpr transfer_const_t<Self, E>* get_if(this Self&& self) noexcept  {
@@ -268,7 +271,8 @@ struct BasicStatus final {
     // the active alternative.
 
     template <typename E, typename Self>
-    requires IsNonVolatileLValueReference<Self> &&
+    requires IsTriviallyStorable<E> &&
+             IsNonVolatileLValueReference<Self> &&
              row_elem_normalized_v<M, E, Row<Es...>>
     // NOLINTNEXTLINE(cppcoreguidelines-missing-std-forward)
     [[nodiscard]] constexpr transfer_const_t<Self, E>& get(this Self&& self) noexcept {

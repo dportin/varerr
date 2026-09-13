@@ -199,8 +199,6 @@ TEMPLATE_TEST_CASE("varerr_status_trivial", "[varerr][status]",
     HomStatus<0>, HomStatus<3>, (HetStatus<0, 3>), (HetStatus<3, 3>)
 ) {
 
-    using TrivialStatus = varerr::Status<UniverseI, TrivialType>;
-
     // BasicStatus inherits triviality from Storage.
 
     STATIC_REQUIRE(std::is_trivially_copyable_v<TestType>);
@@ -209,11 +207,6 @@ TEMPLATE_TEST_CASE("varerr_status_trivial", "[varerr][status]",
     STATIC_REQUIRE(std::is_trivially_move_constructible_v<TestType>);
     STATIC_REQUIRE(std::is_trivially_copy_assignable_v<TestType>);
     STATIC_REQUIRE(std::is_trivially_move_assignable_v<TestType>);
-
-    // BasicStatus is never trivially default constructible.
-
-    STATIC_REQUIRE_FALSE(std::is_trivially_default_constructible_v<HomStatus<1>>);
-    STATIC_REQUIRE_FALSE(std::is_trivially_default_constructible_v<TrivialStatus>);
 
 }
 
@@ -230,16 +223,17 @@ TEST_CASE("varerr_status_trivial_default", "[varerr][status]") {
 
 TEST_CASE("varerr_status_construct_empty", "[varerr][status]") {
 
-    using NoDefaultStatus = varerr::Status<UniverseI, NoDefaultConstructType>;
-
-    // The empty BasicStatus is never constructible.
+    // The empty BasicStatus is never default constructible.
 
     STATIC_REQUIRE_FALSE(std::is_default_constructible_v<HomStatus<0>>);
 
-    // A non-empty BasicStatus inherits constructibility from its alternatives.
+    // The empty BasicStatus has defined copy and move constructors and assign-
+    // ment operators to satisfy the std::expected constraints in BasicResult.
 
-    STATIC_REQUIRE(std::is_default_constructible_v<HomStatus<1>>);
-    STATIC_REQUIRE_FALSE(std::is_default_constructible_v<NoDefaultStatus>);
+    STATIC_REQUIRE(std::is_nothrow_copy_constructible_v<HomStatus<0>>);
+    STATIC_REQUIRE(std::is_nothrow_move_constructible_v<HomStatus<0>>);
+    STATIC_REQUIRE(std::is_nothrow_copy_assignable_v<HomStatus<0>>);
+    STATIC_REQUIRE(std::is_nothrow_move_assignable_v<HomStatus<0>>);
 
 }
 
@@ -348,7 +342,7 @@ TEST_CASE("varerr_status_construct_widen", "[varerr][status]") {
 
     // The active member is not reindexed when the rows share a prefix.
 
-    iterate_index_array<1, 3>([&]<std::size_t I>(const index_constant<I>) -> void {
+    iterate_index_array<1, 3>([]<std::size_t I>(const index_constant<I>) -> void {
 
         constexpr StatusBase status_base { std::in_place_type<E<I>>, std::size_t {42} };
         constexpr StatusPrefixed status_prefixed { status_base };
@@ -361,7 +355,7 @@ TEST_CASE("varerr_status_construct_widen", "[varerr][status]") {
 
     // The active member must be reindexed when the rows do not share a prefix.
 
-    iterate_index_array<1, 3>([&]<std::size_t I>(const index_constant<I>) -> void {
+    iterate_index_array<1, 3>([]<std::size_t I>(const index_constant<I>) -> void {
 
         constexpr StatusBase status_base { std::in_place_type<E<I>>, std::size_t {42} };
         constexpr StatusUnPrefixed status_unprefixed { status_base };
@@ -376,17 +370,96 @@ TEST_CASE("varerr_status_construct_widen", "[varerr][status]") {
 
 TEST_CASE("varerr_status_assign", "[varerr][status]") {
 
-    using R0 = varerr::Row<E<1>, E<3>, E<5>>;
+    using R0 = varerr::Row<E<1>, E<3>>;
     using B0 = varerr::status_from_row_t<UniverseE, R0>;
 
-    constexpr B0 source { std::in_place_type<E<3>>, std::size_t {42} };
-    constexpr B0 target = source;
+    // Copy assignment preserves the discriminator and active alternative.
 
-    // Assignment preserves the discriminator and active alternative.
+    B0 source_copy { std::in_place_type<E<3>>, std::size_t {42} };
+    B0 target_copy { std::in_place_type<E<1>>, std::size_t {43} };
+    target_copy = source_copy; // copy assignment
 
-    STATIC_REQUIRE(target.holds<E<3>>());
-    STATIC_REQUIRE(target.get<E<3>>().value() == 42);
-    STATIC_REQUIRE(target.index() == source.index());
+    REQUIRE(target_copy.holds<E<3>>());
+    REQUIRE(target_copy.get<E<3>>().value() == 42);
+    REQUIRE(target_copy.index() == source_copy.index());
+
+    // Move assignment preserves the discriminator and active alternative.
+
+    B0 source_move { std::in_place_type<E<3>>, std::size_t {42} };
+    B0 target_move { std::in_place_type<E<1>>, std::size_t {43} };
+    target_move = std::move(source_move); // NOLINT
+
+    REQUIRE(target_move.holds<E<3>>());
+    REQUIRE(target_move.get<E<3>>().value() == 42);
+    REQUIRE(target_move.index() == source_move.index());
+
+}
+
+TEST_CASE("varerr_status_assign_widen", "[varerr][status]") {
+
+    using RowBase = varerr::Row<E<1>, E<3>>;
+    using RowPrefixed = varerr::Row<E<1>, E<3>, E<5>>;
+    using RowUnPrefixed = varerr::Row<E<0>, E<1>, E<2>, E<3>, E<4>>;
+
+    using StatusBase = varerr::status_from_row_t<UniverseE, RowBase>;
+    using StatusPrefixed = varerr::status_from_row_t<UniverseE, RowPrefixed>;
+    using StatusUnPrefixed = varerr::status_from_row_t<UniverseE, RowUnPrefixed>;
+
+    // Narrowing assignment is rejected for every cvref-qualification of the
+    // source. Identity assignment is accepted for non-volatile sources.
+
+    iterate_cvref_matrix<StatusBase>([]<typename T>(const std::type_identity<T>) -> void {
+        constexpr bool well_formed = !std::is_volatile_v<std::remove_reference_t<T>>;
+        STATIC_REQUIRE(std::is_assignable_v<StatusBase&, T> == well_formed);
+    });
+
+    iterate_cvref_matrix<StatusPrefixed>([]<typename T>(const std::type_identity<T>) -> void {
+        STATIC_REQUIRE_FALSE(std::is_assignable_v<StatusBase&, T>);
+    });
+
+    // Widening copy assignment preserves the index and active alternative when
+    // the active alternative is part of shared prefix.
+
+    StatusBase source_copy_prefix { std::in_place_type<E<3>>, std::size_t {42} };
+    StatusPrefixed target_copy_prefix { std::in_place_type<E<1>>, std::size_t {43} };
+    target_copy_prefix = source_copy_prefix;
+
+    REQUIRE(target_copy_prefix.holds<E<3>>());
+    REQUIRE(target_copy_prefix.get<E<3>>().value() == 42);
+    REQUIRE(target_copy_prefix.index() == varerr::row_index_normalized_v<UniverseE, E<3>, RowBase>);
+
+    // Widening move assignment preserves the index and active alternative when
+    // the active alternative is part of a shared prefix.
+
+    StatusBase source_move_prefix { std::in_place_type<E<3>>, std::size_t {42} };
+    StatusPrefixed target_move_prefix { std::in_place_type<E<1>>, std::size_t {43} };
+    target_move_prefix = std::move(source_move_prefix); // NOLINT
+
+    REQUIRE(target_move_prefix.holds<E<3>>());
+    REQUIRE(target_move_prefix.get<E<3>>().value() == 42);
+    REQUIRE(target_move_prefix.index() == varerr::row_index_normalized_v<UniverseE, E<3>, RowBase>);
+
+    // Widening copy assignment preserves the active alternative but not the in-
+    // dex when the active alternative is not part of a shared prefix.
+
+    StatusBase source_copy_noprefix { std::in_place_type<E<3>>, std::size_t {42} };
+    StatusUnPrefixed target_copy_noprefix { std::in_place_type<E<1>>, std::size_t {43} };
+    target_copy_noprefix = source_copy_noprefix;
+
+    REQUIRE(target_copy_noprefix.holds<E<3>>());
+    REQUIRE(target_copy_noprefix.get<E<3>>().value() == 42);
+    REQUIRE(target_copy_noprefix.index() == varerr::row_index_normalized_v<UniverseE, E<3>, RowUnPrefixed>);
+
+    // Widening move assignment preserves the active alternative but not the in-
+    // dex when the active alternative is not part of a shared prefix.
+
+    StatusBase source_move_noprefix { std::in_place_type<E<3>>, std::size_t {42} };
+    StatusUnPrefixed target_move_noprefix { std::in_place_type<E<1>>, std::size_t {43} };
+    target_move_noprefix = std::move(source_move_noprefix); // NOLINT
+
+    REQUIRE(target_move_noprefix.holds<E<3>>());
+    REQUIRE(target_move_noprefix.get<E<3>>().value() == 42);
+    REQUIRE(target_move_noprefix.index() == varerr::row_index_normalized_v<UniverseE, E<3>, RowUnPrefixed>);
 
 }
 
@@ -427,7 +500,7 @@ TEST_CASE("varerr_status_constraints_emplace", "[varerr][status]") {
 
     // The constructed alternative must be an element of the error row.
 
-    iterate_index_sequence<kTestIndexBound>([]<typename std::size_t I>(index_constant<I>) -> void {
+    iterate_index_sequence<kTestIndexBound>([]<std::size_t I>(const index_constant<I>) -> void {
         constexpr bool has_alternative = varerr::row_elem_normalized_v<UniverseE, E<I>, RN>;
         STATIC_REQUIRE(std::constructible_from<B0, std::in_place_type_t<E<I>>> == has_alternative);
         STATIC_REQUIRE(std::constructible_from<B0, std::in_place_type_t<E<I>>, std::size_t> == has_alternative);
@@ -504,6 +577,8 @@ TEST_CASE("varerr_status_constraints_widen", "[varerr][status]") {
     using UniverseOther = pack_apply_t<bind_adapter<UniverseT>, RowExtend>;
     using StatusOther = varerr::status_from_row_t<UniverseOther, RowExtend>;
 
+    STATIC_REQUIRE(std::is_constructible_v<StatusExtend, StatusBase&>);
+    STATIC_REQUIRE(std::is_constructible_v<StatusExtend, const StatusBase&>);
     STATIC_REQUIRE_FALSE(std::is_constructible_v<StatusExtend, StatusOther&>);
     STATIC_REQUIRE_FALSE(std::is_constructible_v<StatusExtend, const StatusOther&>);
 
@@ -700,6 +775,24 @@ TEST_CASE("varerr_status_constraints_visit_forward", "[varerr][status]") {
 
 }
 
+
+TEST_CASE("varerr_status_constraints_exact", "[varerr][status]") {
+
+    using R0 = varerr::Row<E<3>, E<5>, E<1>>;
+    using B0 = varerr::status_from_row_t<UniverseE, R0>;
+
+    // The constructors and accessors reject cvref-qualified keys.
+
+    iterate_cvref_matrix<E<3>>([]<typename K>(const std::type_identity<K>) -> void {
+        constexpr bool is_exact = std::same_as<K, std::remove_cvref_t<K>>;
+        STATIC_REQUIRE(std::constructible_from<B0, std::in_place_type_t<K>, std::size_t> == is_exact);
+        STATIC_REQUIRE(IsStatusHoldsWellFormed<B0&, K> == is_exact);
+        STATIC_REQUIRE(IsStatusGetWellFormed<B0&, K> == is_exact);
+        STATIC_REQUIRE(IsStatusGetIfWellFormed<B0&, K> == is_exact);
+    });
+
+}
+
 TEST_CASE("varerr_status_noexcept_default", "[varerr][status]") {
 
     using RowDefCon = varerr::Row<E<0>, DefaultThrowType>;
@@ -756,11 +849,13 @@ TEST_CASE("varerr_status_noexcept_holds", "[varerr][status]") {
     constexpr std::size_t kTestBound = 3;
 
     iterate_index_sequence<kTestBound>([]<std::size_t I>(const index_constant<I>) -> void {
-        iterate_index_sequence<I>([]<std::size_t J>(const index_constant<J>) -> void {
-            if constexpr (I > 0) {
-                STATIC_REQUIRE(noexcept(std::declval<HomStatus<I>&>().template holds<E<J>>()));
-            }
-        });
+        if constexpr (I > 0) {
+            iterate_const_matrix<HomStatus<I>>([]<typename S>(const std::type_identity<S>) -> void {
+                iterate_index_sequence<I>([]<std::size_t J>(const index_constant<J>) -> void {
+                    STATIC_REQUIRE(noexcept(std::declval<S&>().template holds<E<J>>()));
+                });
+            });
+        }
     });
 
 }
@@ -771,7 +866,9 @@ TEST_CASE("varerr_status_noexcept_index", "[varerr][status]") {
 
     iterate_index_sequence<kTestBound>([]<std::size_t I>(const index_constant<I>) -> void {
         if constexpr (I > 0) {
-            STATIC_REQUIRE(noexcept(std::declval<HomStatus<I>&>().index()));
+            iterate_const_matrix<HomStatus<I>>([]<typename S>(const std::type_identity<S>) -> void {
+                STATIC_REQUIRE(noexcept(std::declval<S&>().index()));
+            });
         }
     });
 
@@ -782,11 +879,13 @@ TEST_CASE("varerr_status_noexcept_get_if", "[varerr][status]") {
     constexpr std::size_t kTestBound = 3;
 
     iterate_index_sequence<kTestBound>([]<std::size_t I>(const index_constant<I>) -> void {
-        iterate_index_sequence<I>([]<std::size_t J>(const index_constant<J>) -> void {
-            if constexpr (I > 0) {
-                STATIC_REQUIRE(noexcept(std::declval<HomStatus<I>&>().template get_if<E<J>>()));
-            }
-        });
+        if constexpr (I > 0) {
+            iterate_const_matrix<HomStatus<I>>([]<typename S>(const std::type_identity<S>) -> void {
+                iterate_index_sequence<I>([]<std::size_t J>(const index_constant<J>) -> void {
+                    STATIC_REQUIRE(noexcept(std::declval<S&>().template get_if<E<J>>()));
+                });
+            });
+        }
     });
 
 }
@@ -796,11 +895,13 @@ TEST_CASE("varerr_status_noexcept_get", "[varerr][status]") {
     constexpr std::size_t kTestBound = 3;
 
     iterate_index_sequence<kTestBound>([]<std::size_t I>(const index_constant<I>) -> void {
-        iterate_index_sequence<I>([]<std::size_t J>(const index_constant<J>) -> void {
-            if constexpr (I > 0) {
-                STATIC_REQUIRE(noexcept(std::declval<HomStatus<I>&>().template get<E<J>>()));
-            }
-        });
+        if constexpr (I > 0) {
+            iterate_const_matrix<HomStatus<I>>([]<typename S>(const std::type_identity<S>) -> void {
+                iterate_index_sequence<I>([]<std::size_t J>(const index_constant<J>) -> void {
+                    STATIC_REQUIRE(noexcept(std::declval<S&>().template get<E<J>>()));
+                });
+            });
+        }
     });
 
 }
@@ -814,7 +915,7 @@ TEST_CASE("varerr_status_noexcept_visit", "[varerr][status]") {
 
     // The visit is noexcept if the visitor is noexcept for every alternative.
 
-    iterate_index_sequence<kIndexTestBound>([]<std::size_t I>(index_constant<I>) -> void {
+    iterate_index_sequence<kIndexTestBound>([]<std::size_t I>(const index_constant<I>) -> void {
         constexpr bool is_noexcept = noexcept(std::declval<B0&>().visit(VisitorThrowOnIndexConstL<I> {}));
         constexpr bool is_alternative = varerr::row_elem_normalized_v<UniverseE, E<I>, R0>;
         STATIC_REQUIRE(is_noexcept == !is_alternative);

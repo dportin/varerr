@@ -6,6 +6,7 @@ Experimental error-handling library.
 
 - The headers require a compiler with C++23 language support.
 - The `-dev` presets require a generator that can emit `compile_commands.json`.
+- The `-dev-tools` presets require Clang-Tidy and IWYU (see below for platform requirements).
 
 ## Quick Start
 
@@ -32,13 +33,15 @@ Clang-Tidy is enabled for all configurations. IWYU is enabled only for Clang con
 
 ## TODO
 
-- Refactor `status.hpp` and `result.hpp` tests.
+- Refactor `result.hpp` and implement tests.
+- Move copy and move constructibility requirements into `BasicStatus` constraints.
+- Remove the forwarding constructor from `BasicStatus`.
 - Simplify compile-time iteration with `iterate_index_sequence` and friends.
 - Simplify lifting operations with `pack_apply` and friends.
-- Give traits in public interface more meaningful names (`IsStatusAlternative`, `IsErrorRow`).
+- Give traits in public interface more meaningful names (`IsTriviallyStorable` vs `IsStorageAlternative`).
 - Provide a static factory method to in-place construct the error branch of `BasicResult`.
-- The `BasicStatus` discriminant should depend on the row size (`std::uint8_t` for small rows).
 - Consider testing sparsely-ranked rows in `test_algebra.cpp`.
+- Consider switching between jump table and binary dispatch in `BasicStatus` when number of alternatives is large.
 
 ## License
 

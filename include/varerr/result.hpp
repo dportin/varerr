@@ -1,6 +1,7 @@
 #ifndef VARERR_RESULT_HPP
 #define VARERR_RESULT_HPP
 
+#include "utilities.hpp"
 #include "storage.hpp"
 #include "algebra.hpp"
 #include "status.hpp"
@@ -261,7 +262,7 @@ struct BasicResult final {
 
     template <typename Self>
     requires (!std::is_void_v<T>)
-    [[nodiscard]] constexpr const_preserving_pointer_t<Self, T> value_if(this Self& self) noexcept {
+    [[nodiscard]] constexpr transfer_const_t<Self, T>* value_if(this Self& self) noexcept {
         if (self.has_value()) {
             return std::addressof(*self.result_);
         } else {
@@ -280,7 +281,7 @@ struct BasicResult final {
     }
 
     template <typename E, typename Self>
-    [[nodiscard]] constexpr const_preserving_pointer_t<Self, E> error_if(this Self& self) noexcept {
+    [[nodiscard]] constexpr transfer_const_t<Self, E>* error_if(this Self& self) noexcept {
         static_assert(row_elem_normalized_v<M, E, Row<Es...>>);
         return self.status().template get_if<E>();
     }
@@ -307,8 +308,13 @@ struct BasicResult final {
         using InvokeF = std::remove_cvref_t<detail::forwarding_voidable_invoke_result_t<F, Self, T>>; /* decayed */
         using ResultF = BasicResult<M, InvokeF, Es...>;
 
-        if (self.has_error()) [[unlikely]] {
-            return ResultF(std::unexpect, std::forward<Self>(self).status());
+        // The constexpr guard is required to prevent the compiler from attempt-
+        // ing to type-check a call to status() with an uninhabited BasicStatus.
+
+        if constexpr (IsNonEmptyRow<Row<Es...>>) {
+            if (self.has_error()) [[unlikely]] {
+                return ResultF(std::unexpect, std::forward<Self>(self).status());
+            }
         }
 
         const auto invoke = [&f, &self]() -> decltype(auto) /* decayed */ {
@@ -343,11 +349,17 @@ struct BasicResult final {
         static_assert(IsNormalizedRow<M, result_row_t<InvokeF>>, "and_then: F must return a normalized error row");
 
         using ErrRowF = row_union_normalized_t<M, Row<Es...>, result_row_t<InvokeF>>;
-        using StatusF = detail::basic_status_row_adapter_t<M, ErrRowF>;
+        using StatusF = status_from_normalized_row_t<M, ErrRowF>;
         using ResultF = result_rebind_t<InvokeF, result_value_t<InvokeF>, ErrRowF>;
 
-        if (self.has_error()) [[unlikely]] {
-            return ResultF(std::unexpect, StatusF(std::forward<Self>(self).status()));
+        // The constexpr guard is required to prevent the compiler from attempt-
+        // ing to type-check a call to the widening constructor with an uninhab-
+        // ited BasicStatus.
+
+        if constexpr (IsNonEmptyRow<Row<Es...>>) {
+            if (self.has_error()) [[unlikely]] {
+                return ResultF(std::unexpect, StatusF(std::forward<Self>(self).status()));
+            }
         }
 
         if constexpr (std::is_void_v<T>) {
@@ -361,7 +373,9 @@ struct BasicResult final {
     // The handle (and_then/bind on the error row) combinator.
 
     template <IsTriviallyStorable... Fs, typename Self, typename H>
-    requires (sizeof...(Fs) > 0) && IsRankedPack<M, Fs...>
+    requires IsNonEmptyRow<Row<Es...>> &&
+             IsNonEmptyPack<Fs...> &&
+             IsRankedPack<M, Fs...>
     [[nodiscard]] auto /* prvalue */ handle(this Self&& self, H&& h) {
 
         // If the handler handles a single alternative we have:
@@ -407,7 +421,7 @@ struct BasicResult final {
             result_row_t<handler_invoke_result_t<std::remove_cvref_t<H>, Self, Fs>>...
         >;
 
-        using StatusH = detail::basic_status_row_adapter_t<M, ErrRowH>;
+        using StatusH = status_from_normalized_row_t<M, ErrRowH>;
         using ResultH = result_rebind_t<std::remove_cvref_t<Self>, T, ErrRowH>;
 
         if (self.has_value()) [[likely]] {
@@ -436,6 +450,7 @@ struct BasicResult final {
     using ResultType = std::expected<ValueType, ErrorType>;
 
     template <typename Self>
+    requires IsNonEmptyRow<Row<Es...>>
     [[nodiscard]] constexpr decltype(auto) status(this Self&& self) noexcept {
         assert(self.has_error());
         return std::forward<Self>(self).result_.error();

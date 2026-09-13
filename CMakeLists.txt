@@ -42,6 +42,22 @@ cmake_dependent_option(
     "${PROJECT_NAME}_TESTING" OFF
 )
 
+# IWYU (0.26) crashes when parsing a dependent member template of a template ty-
+# pe parameter. This current affects the implementation of the pack_apply templ-
+# ate in the main utilities header.
+
+set(${PROJECT_NAME}_TESTING_IWYU_EXCLUDE
+    "${PROJECT_NAME}/utilities.hpp"
+)
+
+if (${PROJECT_NAME}_TESTING_IWYU)
+    set(${PROJECT_NAME}_TESTING_IWYU_EXCLUDE_EXTRA ""
+        CACHE STRING "Additional headers to exclude from IWYU test targets"
+    )
+else()
+    unset(${PROJECT_NAME}_TESTING_IWYU_EXCLUDE_EXTRA CACHE)
+endif()
+
 # Generate compilation database.
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
@@ -168,6 +184,7 @@ target_sources(${PROJECT_NAME}_header_only
         BASE_DIRS
             "${CMAKE_CURRENT_SOURCE_DIR}/include"
         FILES
+            "${CMAKE_CURRENT_SOURCE_DIR}/include/${PROJECT_NAME}/utilities.hpp"
             "${CMAKE_CURRENT_SOURCE_DIR}/include/${PROJECT_NAME}/storage.hpp"
             "${CMAKE_CURRENT_SOURCE_DIR}/include/${PROJECT_NAME}/algebra.hpp"
             "${CMAKE_CURRENT_SOURCE_DIR}/include/${PROJECT_NAME}/status.hpp"

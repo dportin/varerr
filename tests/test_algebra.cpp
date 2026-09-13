@@ -37,7 +37,10 @@ constexpr std::size_t kAlgebraTernaryMaskBound = std::size_t {1} << kAlgebraMaxT
 // Lift the homogeneous test universe to a Row.
 
 template <std::size_t N>
-using L = lift_index_sequence_t<varerr::Row, E, N>;
+using L = pack_apply_t<
+    bind_adapter<varerr::Row>,
+    lift_index_sequence_t<E, N>
+>;
 
 static_assert(std::same_as<L<0>, varerr::Row<>>);
 static_assert(std::same_as<L<1>, varerr::Row<E<0>>>);
@@ -47,7 +50,10 @@ static_assert(std::same_as<L<3>, varerr::Row<E<0>, E<1>, E<2>>>);
 // Lift the homogeneous const universe to a Row.
 
 template <std::size_t N>
-using C = lift_index_sequence_t<varerr::Row, ConstUniverseE::unrank, N>;
+using C = pack_apply_t<
+    bind_adapter<varerr::Row>,
+    lift_index_sequence_t<ConstUniverseE::unrank, N>
+>;
 
 static_assert(std::same_as<C<0>, varerr::Row<>>);
 static_assert(std::same_as<C<1>, varerr::Row<E<0>>>);

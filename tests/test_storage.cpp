@@ -23,7 +23,10 @@ namespace {
 // Lift the homogeneous test universe to Storage.
 
 template <std::size_t N>
-using S = lift_index_sequence_t<varerr::detail::Storage, E, N>;
+using S = pack_apply_t<
+    bind_adapter<varerr::detail::Storage>,
+    lift_index_sequence_t<E, N>
+>;
 
 static_assert(std::same_as<S<0>, varerr::detail::Storage<>>);
 static_assert(std::same_as<S<1>, varerr::detail::Storage<E<0>>>);
@@ -31,14 +34,11 @@ static_assert(std::same_as<S<2>, varerr::detail::Storage<E<0>, E<1>>>);
 
 // Lift the heterogeneous test universe to Storage for a fixed log-alignment.
 
-template <std::size_t A>
-struct fixed_align_bind_adapter {
-    template <std::size_t N>
-    using type = H<N, A>;
-};
-
 template <std::size_t N, std::size_t A>
-using G = lift_index_sequence_t<varerr::detail::Storage, fixed_align_bind_adapter<A>::template type, N>;
+using G = pack_apply_t<
+    bind_adapter<varerr::detail::Storage>,
+    lift_index_sequence_t<index_bind_back_adapter<H, A>::template apply, N>
+>;
 
 static_assert(std::same_as<G<0,3>, varerr::detail::Storage<>>);
 static_assert(std::same_as<G<1,3>, varerr::detail::Storage<H<0,3>>>);
@@ -92,6 +92,7 @@ TEMPLATE_TEST_CASE("varerr_storage_trivial", "[varerr][storage]",
 
     STATIC_REQUIRE(std::is_default_constructible_v<TestType>);
     STATIC_REQUIRE_FALSE(std::is_trivially_default_constructible_v<TestType>);
+
 }
 
 TEST_CASE("varerr_storage_trivial_propagate", "[varerr][storage]") {
@@ -181,6 +182,8 @@ TEST_CASE("varerr_storage_noexcept_conditional_get", "[varerr][storage]") {
 
 TEMPLATE_TEST_CASE("varerr_storage_memory", "[varerr][storage]",
     S<1>, S<2>, S<3>, S<4>,
+    (varerr::detail::Storage<H<40,0>, H<1,4>>),
+    (varerr::detail::Storage<H<1,4>, H<40,0>>),
     (varerr::detail::Storage<H<1,13>, H<64,0>, H<8,8>>),
     (varerr::detail::Storage<H<64,0>, H<1,13>, H<8,8>>),
     (varerr::detail::Storage<H<64,0>, H<8,8>, H<1,13>>),
@@ -571,6 +574,24 @@ TEST_CASE("varerr_storage_constexpr_access_move", "[varerr][storage]") {
 
 }
 
+TEST_CASE("varerr_storage_constexpr_reactivate", "[varerr][storage]") {
+
+    STATIC_REQUIRE([]() -> std::size_t {
+        S<5> storage {};
+        varerr::detail::storage_emplace<4>(storage, std::size_t {42});
+        varerr::detail::storage_emplace<0>(storage, std::size_t {43});
+        return varerr::detail::storage_get<0>(storage).value();
+    }() == 43);
+
+    STATIC_REQUIRE([]() -> std::size_t {
+        S<5> storage {};
+        varerr::detail::storage_emplace<0>(storage, std::size_t {42});
+        varerr::detail::storage_emplace<4>(storage, std::size_t {43});
+        return varerr::detail::storage_get<4>(storage).value();
+    }() == 43);
+
+}
+
 TEST_CASE("varerr_storage_functional_forward_emplace", "[varerr][storage]") {
 
     using S0 = varerr::detail::Storage<E<0>, ForwardProbeType, E<1>>;
@@ -666,10 +687,10 @@ TEST_CASE("varerr_storage_constraints_construct", "[varerr][storage]") {
 
         // I == 0 is the base constructor case; I > 0 is the recursive case.
 
+        STATIC_REQUIRE(IsStorageInPlaceConstructWellFormed<S<3>, I>);
         STATIC_REQUIRE(IsStorageInPlaceConstructWellFormed<S<3>, I, std::size_t>);
         STATIC_REQUIRE(IsStorageInPlaceConstructWellFormed<S<3>, I, std::size_t&&>);
         STATIC_REQUIRE(IsStorageInPlaceConstructWellFormed<S<3>, I, const std::size_t&>);
-        STATIC_REQUIRE_FALSE(IsStorageInPlaceConstructWellFormed<S<3>, I>);
         STATIC_REQUIRE_FALSE(IsStorageInPlaceConstructWellFormed<S<3>, I, std::size_t, std::size_t>);
         STATIC_REQUIRE_FALSE(IsStorageInPlaceConstructWellFormed<S<3>, I, std::size_t*>);
 

@@ -1,6 +1,7 @@
 #ifndef VARERR_TESTS_UNIVERSE_HPP
 #define VARERR_TESTS_UNIVERSE_HPP
 
+#include "utilities.hpp"
 #include <algorithm>
 #include <cassert>
 #include <climits>
@@ -29,7 +30,9 @@ using unrank_v = M::template unrank<N>;
 template <std::size_t N>
 struct E {
 
-    std::size_t value_;
+    std::size_t value_ {};
+
+    constexpr E() noexcept = default;
 
     constexpr explicit E(std::size_t value) noexcept : value_{value} {}
 
@@ -123,6 +126,8 @@ struct alignas((std::size_t {1} << A)) H<0, A> {
 
     static_assert(A <= kMaxLogAlign, "A must not exceed kMaxLogAlign");
 
+    constexpr H() noexcept = default;
+
     constexpr explicit H(std::size_t) noexcept {}
 
     [[nodiscard]] constexpr std::span<const unsigned char> bytes() const noexcept {
@@ -136,7 +141,9 @@ struct H {
 
     static_assert(A <= kMaxLogAlign, "A must not exceed kMaxLogAlign");
 
-    alignas((std::size_t {1} << A)) unsigned char value_[N]; // NOLINT
+    alignas((std::size_t {1} << A)) unsigned char value_[N] {}; // NOLINT
+
+    constexpr H() noexcept = default;
 
     constexpr explicit H(std::size_t value) noexcept {
         for (std::size_t i = 0; i < N; ++i) {
@@ -200,7 +207,43 @@ static_assert(std::same_as<UniverseH::template unrank<UniverseH::template rank<H
 static_assert(std::same_as<UniverseH::template unrank<UniverseH::template rank<H<2,2>>>, H<2,2>>);
 static_assert(std::same_as<UniverseH::template unrank<UniverseH::template rank<H<4,4>>>, H<4,4>>);
 
+// Universe with a single rank collision.
+
+struct AliasA { int value_; };
+struct AliasB { int value_; };
+struct AliasC { int value_; };
+
+struct UniverseAlias {
+
+    template <typename T>
+    struct rank_trait;
+
+    template <typename T>
+    requires requires { rank_trait<std::remove_cvref_t<T>>::value; }
+    static constexpr std::size_t rank = rank_trait<std::remove_cvref_t<T>>::value;
+
+};
+
+template <>
+struct UniverseAlias::rank_trait<AliasA> : std::integral_constant<std::size_t, 0> {};
+
+template <>
+struct UniverseAlias::rank_trait<AliasB> : std::integral_constant<std::size_t, 0> {};
+
+template <>
+struct UniverseAlias::rank_trait<AliasC> : std::integral_constant<std::size_t, 1> {};
+
+
 // Assorted types designed to break specific invariants.
+
+// Entirely trivial type.
+
+struct TrivialType {
+    int value_;
+};
+
+static_assert(std::is_trivial_v<TrivialType>);
+static_assert(std::is_default_constructible_v<TrivialType>);
 
 // Trivially copy assignable but not copy constructible.
 
@@ -338,6 +381,16 @@ struct ConditionalThrowType {
 static_assert(std::is_nothrow_constructible_v<ConditionalThrowType, int>);
 static_assert(!std::is_nothrow_constructible_v<ConditionalThrowType, double>);
 
+// Distinguish throwing from non-throwing default constructor.
+
+struct DefaultThrowType {
+    int value_;
+    DefaultThrowType() : value_ {} {}
+};
+
+static_assert(std::is_default_constructible_v<DefaultThrowType>);
+static_assert(!std::is_nothrow_default_constructible_v<DefaultThrowType>);
+
 // Track the value category of forwarded arguments. The forwarding constructors
 // are constrained to the cvref-unqualified type to prevent hijacking the copy
 // and move constructors (so the class remains trivially copyable).
@@ -389,6 +442,35 @@ struct ForwardProbeType {
 static_assert(std::is_trivially_copyable_v<ForwardProbeType>);
 static_assert(std::is_trivially_copy_constructible_v<ForwardProbeType>);
 static_assert(std::is_trivially_move_constructible_v<ForwardProbeType>);
+
+template <typename... Es>
+struct UniverseT {
+
+    using RankedTypes = type_pack_t<Es...>;
+
+    template <typename T>
+    requires pack_member_v<std::remove_cvref_t<T>, RankedTypes>
+    static constexpr std::size_t rank = pack_index_v<std::remove_cvref_t<T>, RankedTypes>;
+
+};
+
+struct UniverseI : UniverseT<
+    TrivialType,
+    NoCopyConstructType,
+    NoCopyAssignType,
+    NoMoveConstructType,
+    NoMoveAssignType,
+    NonTrivialConstructType,
+    NonTrivialDestructType,
+    NonTrivialCopyConstructType,
+    NonTrivialCopyAssignType,
+    NonTrivialMoveConstructType,
+    NonTrivialMoveAssignType,
+    NoDefaultConstructType,
+    NonStandardLayoutType,
+    ConditionalThrowType,
+    ForwardProbeType
+> {};
 
 } // namespace varerr::tests::universe
 

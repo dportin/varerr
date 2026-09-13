@@ -25,7 +25,7 @@ constexpr void instantiate(const T&) noexcept {}
 // Instantiate the Storage type.
 
 template <typename... Es>
-constexpr void instantiate_storage_type() {
+[[maybe_unused]] constexpr void instantiate_storage_type() {
 
     constexpr std::size_t N = sizeof...(Es);
     using S = varerr::detail::Storage<Es...>;
@@ -45,7 +45,7 @@ template void instantiate_storage_type<E<0>, E<1>, E<2>>();
 // Instantiate the Storage traits.
 
 template <typename... Es>
-constexpr void instantiate_storage_traits() {
+[[maybe_unused]] constexpr void instantiate_storage_traits() {
 
     constexpr std::size_t N = sizeof...(Es);
     using S = varerr::detail::Storage<Es...>;
@@ -68,7 +68,7 @@ template void instantiate_storage_traits<E<0>, E<1>, E<2>>();
 // Instantiate the Storage interface.
 
 template <typename... Es>
-constexpr void instantiate_storage_interface() {
+[[maybe_unused]] constexpr void instantiate_storage_interface() {
 
     constexpr std::size_t N = sizeof...(Es);
     using S = varerr::detail::Storage<Es...>;
@@ -100,7 +100,7 @@ template void instantiate_storage_interface<E<0>, E<1>, E<2>>();
 // Instantiate the row algebra traits.
 
 template <typename M, typename U>
-constexpr void instantiate_algebra_traits_unary() {
+[[maybe_unused]] constexpr void instantiate_algebra_traits_unary() {
 
     constexpr std::size_t N = varerr::row_size_v<U>;
 
@@ -119,7 +119,7 @@ template void instantiate_algebra_traits_unary<UniverseE, varerr::Row<E<0>, E<1>
 // Instantiate the row algebra operations.
 
 template <typename M, typename U, typename V>
-constexpr void instantiate_algebra_traits_binary() {
+[[maybe_unused]] constexpr void instantiate_algebra_traits_binary() {
 
     instantiate(varerr::row_size_v<U>);
     instantiate(varerr::row_subset_normalized_v<M, U, V>);

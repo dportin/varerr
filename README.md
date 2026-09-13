@@ -33,6 +33,8 @@ Clang-Tidy is enabled for all configurations. IWYU is enabled only for Clang con
 
 ## TODO
 
+- Equality operator for `BasicStatus` and `BasicResult`.
+- Move copy/move constructibility static assertions to class constraints for `BasicStatus` and `BasicResult`.
 - Refactor `result.hpp` and implement tests.
 - Move copy and move constructibility requirements into `BasicStatus` constraints.
 - Remove the forwarding constructor from `BasicStatus`.

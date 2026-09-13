@@ -175,6 +175,9 @@ inline constexpr bool is_handler_branch_valid_v =
 
 // The main result type.
 
+// TODO: Need to assert trivial copy/move constructibility for Es... in the con-
+// straints.
+
 template <typename M, typename T, IsTriviallyStorable... Es>
 requires IsNormalizedPack<M, Es...>
 struct BasicResult final {
@@ -183,15 +186,13 @@ struct BasicResult final {
     requires IsNormalizedPack<N, Fs...>
     friend struct BasicResult;
 
-    // Construct a BasicResult from a T.
+    // Construct BasicResult from T.
 
-    explicit constexpr BasicResult(const T& r)
-    noexcept(noexcept(ResultType(r))) :
-        result_(r) {}
-
-    explicit constexpr BasicResult(T&& r)
-    noexcept(noexcept(ResultType(r))) :
-        result_(std::move(r)) {}
+    template <typename... Args>
+    requires std::is_void_v<T> || std::constructible_from<T, Args...>
+    explicit constexpr BasicResult(std::in_place_t, Args&&... args)
+    noexcept(std::is_nothrow_constructible_v<T, Args...>) :
+        result_ { std::in_place, std::forward<Args>(args) ... } {}
 
     // Construct a BasicResult from an Error.
 
@@ -455,18 +456,6 @@ struct BasicResult final {
         assert(self.has_error());
         return std::forward<Self>(self).result_.error();
     }
-
-    // Construct a BasicResult from a std::expected.
-
-    template <typename... Args>
-    constexpr BasicResult(std::in_place_t, Args&&... args)
-    noexcept(noexcept(ResultType(std::in_place, std::forward<Args>(args)...)))
-        : result_(std::in_place, std::forward<Args>(args)...) {}
-
-    template <typename S>
-    constexpr BasicResult(std::unexpect_t, S&& status)
-    noexcept(noexcept(ResultType(std::unexpect, std::forward<S>(status))))
-        : result_(std::unexpect, std::forward<S>(status)) {}
 
     // Explicit widening helper
 

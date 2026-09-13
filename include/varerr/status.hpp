@@ -217,7 +217,7 @@ struct BasicStatus final {
     // The parameter is a const reference to BasicStatus<M, Fs...> rather than a
     // forwarding reference since: (a) there are no move semantics as the alter-
     // natives are trivially copyable; and (b) the forwarding pattern would req-
-    // uire destructuring and checking the universe and row.
+    // uire destructuring and checking the universe and row for consistency.
 
     template <IsTriviallyStorable... Fs>
     requires IsNonEmptyRow<Row<Fs...>> &&
@@ -241,7 +241,6 @@ struct BasicStatus final {
     }
 
     // Return the index of the underlying storage for the active alternative.
-    // The return type is always std::size_t (never the discriminator).
 
     [[nodiscard]] constexpr std::size_t index() const noexcept {
         return static_cast<std::size_t>(this->discrim_);
@@ -328,8 +327,7 @@ struct BasicStatus<M> final {
 
 };
 
-// The trait accessors do not strip cvref qualifiers because the error row is
-// constrained to trivially storable type.s
+// Destructure BasicStatus into its components.
 
 namespace detail {
 
@@ -360,7 +358,7 @@ template <IsStatus S>
 using status_universe_t = detail::status_traits<std::remove_cvref_t<S>>::UniverseType;
 
 template <IsStatus S, std::size_t I>
-using status_alternative_t = detail::row_subscript_t<I, status_row_t<std::remove_cvref_t<S>>>;
+using status_alternative_t = detail::row_subscript_t<I, status_row_t<S>>;
 
 // Construct a BasicStatus from a normalized or non-normalized parameter pack.
 

@@ -21,7 +21,7 @@ using namespace varerr::tests::universe;
 
 namespace {
 
-// Lift the homogeneous test universe to Status.
+// Lift the homogeneous test universe to BasicStatus.
 
 template <std::size_t N>
 using HomStatus = pack_apply_t<
@@ -33,7 +33,8 @@ static_assert(std::same_as<HomStatus<0>, varerr::Status<UniverseE>>);
 static_assert(std::same_as<HomStatus<1>, varerr::Status<UniverseE, E<0>>>);
 static_assert(std::same_as<HomStatus<2>, varerr::Status<UniverseE, E<0>, E<1>>>);
 
-// Lift the heterogeneous test universe to Status for a fixed log-alignment.
+// Lift the heterogeneous test universe to BasicStatus for a fixed log-align-
+// ment.
 
 template <std::size_t N, std::size_t A>
 using HetStatus = pack_apply_t<
@@ -45,7 +46,8 @@ static_assert(std::same_as<HetStatus<0, 3>, varerr::Status<UniverseH>>);
 static_assert(std::same_as<HetStatus<1, 3>, varerr::Status<UniverseH, H<0, 3>>>);
 static_assert(std::same_as<HetStatus<2, 3>, varerr::Status<UniverseH, H<0, 3>, H<1, 3>>>);
 
-// Determine whether a call is well-formed.
+// Determine whether a BasicStatus constructor or member function invocation is
+// well-formed.
 
 template <typename S, typename E>
 concept IsStatusHoldsWellFormed = requires {
@@ -72,7 +74,7 @@ concept IsStatusVisitWellFormed = requires {
     std::declval<S>().visit(std::declval<V>());
 };
 
-// Storage and layout testing.
+// Test storage and layout properties of BasicStatus.
 
 template <typename... Es>
 struct status_storage_traits_impl {
@@ -103,7 +105,7 @@ constexpr std::size_t status_alignof_v = status_storage_traits<S>::align;
 template <varerr::IsStatus S>
 constexpr std::size_t status_sizeof_v = status_storage_traits<S>::size;
 
-// VisitorVoidConstL binds every value type.
+// Test BasicStatus visitor properties.
 
 struct VisitorVoidL {
     [[maybe_unused]] void operator()(auto&) const noexcept {}
@@ -165,7 +167,7 @@ struct VisitorVoidPartialConstL {
 
 template <std::size_t I>
 struct VisitorVoidPartialR {
-    [[maybe_unused]] void operator()(E<I>&&) const noexcept {}
+    [[maybe_unused]] void operator()(E<I>&&) const noexcept {} // NOLINT
 };
 
 template <std::size_t I>
@@ -191,7 +193,7 @@ struct VisitorThrowOnIndexConstL {
     [[maybe_unused]] void operator()(const auto&) const noexcept {}
 };
 
-// Differentiates const from non-const lvalue reference.
+// Differentiate const from non-const lvalue reference.
 
 struct VisitorThrowOnConstL {
     [[maybe_unused]] void operator()(auto&) const noexcept {}
@@ -200,7 +202,7 @@ struct VisitorThrowOnConstL {
     [[maybe_unused]] void operator()(const auto&&) const noexcept {}
 };
 
-// Differentiates lvalue from rvalue references.
+// Differentiate lvalue from rvalue references.
 
 struct VisitorThrowOnR {
     [[maybe_unused]] void operator()(auto&) const noexcept {}
@@ -225,6 +227,16 @@ struct VisitorAsRValueVoid {
 
 struct VisitorAsConstRValueVoid {
     [[maybe_unused]] void operator()(const auto&) const && noexcept {}
+};
+
+// Test exception propagation through dispatch chain.
+
+struct VisitorThrowType {};
+
+template <std::size_t I>
+struct VisitorThrowOnIndex {
+    [[maybe_unused]] void operator()(const E<I>&) const { throw VisitorThrowType {}; }
+    [[maybe_unused]] void operator()(const auto&) const noexcept {}
 };
 
 } // namespace
@@ -1033,6 +1045,31 @@ TEST_CASE("varerr_status_memory_discriminator", "[varerr][status]") {
 
 }
 
+TEST_CASE("varerr_status_memory_discriminator_align", "[varerr][status]") {
+
+    constexpr std::size_t force_align_small = std::numeric_limits<std::uint_least8_t>::max() + 1;
+    constexpr std::size_t force_align_large = force_align_small + 2;
+
+    STATIC_REQUIRE(std::same_as<varerr::status_discriminator_t<force_align_small>, std::uint_least8_t>);
+    STATIC_REQUIRE(std::same_as<varerr::status_discriminator_t<force_align_large>, std::uint_least16_t>);
+
+    // The discriminator determines the alignment when its alignment is stricter
+    // than every alternative. The alignment of an error row consisting of byte-
+    // aligned H<N, 0> types will therefore be determined by the discriminator.
+
+    using StatusAlignSmall = HetStatus<force_align_small, 0>;
+    using StatusAlignLarge = HetStatus<force_align_large, 0>;
+
+    STATIC_REQUIRE(alignof(StatusAlignLarge) > alignof(StatusAlignSmall));
+
+    STATIC_REQUIRE(sizeof(StatusAlignSmall) == status_sizeof_v<StatusAlignSmall>);
+    STATIC_REQUIRE(sizeof(StatusAlignLarge) == status_sizeof_v<StatusAlignLarge>);
+
+    STATIC_REQUIRE(alignof(StatusAlignSmall) == status_alignof_v<StatusAlignSmall>);
+    STATIC_REQUIRE(alignof(StatusAlignLarge) == status_alignof_v<StatusAlignLarge>);
+
+}
+
 TEMPLATE_TEST_CASE("varerr_status_memory_mixed", "[varerr][status]",
     (varerr::Row<H<40, 0>, H<1, 4>>),
     (varerr::Row<H<1, 4>, H<40, 0>>)
@@ -1042,9 +1079,17 @@ TEMPLATE_TEST_CASE("varerr_status_memory_mixed", "[varerr][status]",
     using TestUniverse = pack_apply_t<bind_adapter<UniverseT>, TestRow>;
     using TestStatus = varerr::status_from_row_t<TestUniverse, TestRow>;
 
+    using Alt0 = varerr::status_alternative_t<TestStatus, 0>;
+    using Alt1 = varerr::status_alternative_t<TestStatus, 1>;
+
+    // Ensure the alternatives have distinct sizes and alignments.
+
+    STATIC_REQUIRE(sizeof(Alt0) != sizeof(Alt1));
+    STATIC_REQUIRE(alignof(Alt0) != alignof(Alt1));
+
     // The widest and strictest alternative need not be the same type. H<40, 0>
     // is 40 bytes with 1-bytes alignment while H<1, 4> is 1 byte with 16-byte
-    // alignment. In both cases we
+    // alignment.
 
     STATIC_REQUIRE(sizeof(TestStatus) == status_sizeof_v<TestStatus>);
     STATIC_REQUIRE(alignof(TestStatus) == status_alignof_v<TestStatus>);
@@ -1155,5 +1200,60 @@ TEST_CASE("varerr_status_functional_visit", "[varerr][status]") {
             return counter;
         }() == 1);
     });
+
+}
+
+TEST_CASE("varerr_status_functional_visit_throw", "[varerr][status]") {
+
+    using R0 = varerr::Row<E<1>, E<3>, E<5>>;
+    using B0 = varerr::status_from_row_t<UniverseE, R0>;
+
+    // A throwing visitor propagates out of the dispatch chain rather than ter-
+    // minating. Thus the dispatch and visit noexcept specifications agree.
+
+    const B0 status { std::in_place_type<E<3>>, std::size_t {42} };
+
+    REQUIRE_NOTHROW(status.visit(VisitorThrowOnIndex<1> {}));
+    REQUIRE_NOTHROW(status.visit(VisitorThrowOnIndex<5> {}));
+    REQUIRE_THROWS_AS(status.visit(VisitorThrowOnIndex<3> {}), VisitorThrowType);
+
+}
+
+TEST_CASE("varerr_status_functional_visit_forward", "[varerr][status]") {
+
+    using R0 = varerr::Row<E<1>, E<3>, E<5>>;
+    using B0 = varerr::status_from_row_t<UniverseE, R0>;
+
+    // The visitor receives the value category of the status object.
+
+    STATIC_REQUIRE([]() -> bool {
+        B0 status { std::in_place_type<E<3>>, std::size_t {42} };
+        return status.visit([]<typename A>(A&&) -> bool {
+            return std::is_lvalue_reference_v<A&&>;
+        });
+    }() == true);
+
+    STATIC_REQUIRE([]() -> bool {
+        B0 status { std::in_place_type<E<3>>, std::size_t {42} };
+        return std::move(status).visit([]<typename A>(A&&) -> bool { // NOLINT
+            return std::is_rvalue_reference_v<A&&>;
+        });
+    }() == true);
+
+    // The visitor receives the constness of the status object.
+
+    STATIC_REQUIRE([]() -> bool {
+        B0 status { std::in_place_type<E<3>>, std::size_t {42} };
+        return status.visit([]<typename A>(A&&) -> bool {
+            return std::is_const_v<std::remove_reference_t<A>>;
+        });
+    }() == false);
+
+    STATIC_REQUIRE([]() -> bool {
+        const B0 status { std::in_place_type<E<3>>, std::size_t {42} };
+        return status.visit([]<typename A>(A&&) -> bool {
+            return std::is_const_v<std::remove_reference_t<A>>;
+        });
+    }() == true);
 
 }

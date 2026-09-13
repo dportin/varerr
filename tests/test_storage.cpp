@@ -182,6 +182,8 @@ TEST_CASE("varerr_storage_noexcept_conditional_get", "[varerr][storage]") {
 
 TEMPLATE_TEST_CASE("varerr_storage_memory", "[varerr][storage]",
     S<1>, S<2>, S<3>, S<4>,
+    (varerr::detail::Storage<H<40,0>, H<1,4>>),
+    (varerr::detail::Storage<H<1,4>, H<40,0>>),
     (varerr::detail::Storage<H<1,13>, H<64,0>, H<8,8>>),
     (varerr::detail::Storage<H<64,0>, H<1,13>, H<8,8>>),
     (varerr::detail::Storage<H<64,0>, H<8,8>, H<1,13>>),
@@ -569,6 +571,24 @@ TEST_CASE("varerr_storage_constexpr_access_move", "[varerr][storage]") {
             return varerr::detail::storage_get<I>(std::move(storage));
         }().value() == I + 100);
     });
+
+}
+
+TEST_CASE("varerr_storage_constexpr_reactivate", "[varerr][storage]") {
+
+    STATIC_REQUIRE([]() -> std::size_t {
+        S<5> storage {};
+        varerr::detail::storage_emplace<4>(storage, std::size_t {42});
+        varerr::detail::storage_emplace<0>(storage, std::size_t {43});
+        return varerr::detail::storage_get<0>(storage).value();
+    }() == 43);
+
+    STATIC_REQUIRE([]() -> std::size_t {
+        S<5> storage {};
+        varerr::detail::storage_emplace<0>(storage, std::size_t {42});
+        varerr::detail::storage_emplace<4>(storage, std::size_t {43});
+        return varerr::detail::storage_get<4>(storage).value();
+    }() == 43);
 
 }
 

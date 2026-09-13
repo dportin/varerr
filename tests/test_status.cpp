@@ -4,12 +4,15 @@
 
 #include "include/utilities.hpp"
 #include "include/universe.hpp"
+#include "varerr/storage.hpp"
 #include "varerr/utilities.hpp"
 
 #include <varerr/algebra.hpp>
 #include <varerr/status.hpp>
 
 #include <cstddef>
+#include <cstdint>
+#include <limits>
 #include <type_traits>
 #include <utility>
 
@@ -68,6 +71,37 @@ template <typename S, typename V>
 concept IsStatusVisitWellFormed = requires {
     std::declval<S>().visit(std::declval<V>());
 };
+
+// Storage and layout testing.
+
+template <typename... Es>
+struct status_storage_traits_impl {
+
+    using StorageType = varerr::detail::Storage<Es...>;
+    using DiscrimType = varerr::status_discriminator_t<sizeof...(Es)>;
+
+    static constexpr std::size_t discrim_size = sizeof(DiscrimType);
+    static constexpr std::size_t discrim_align = alignof(DiscrimType);
+    static constexpr std::size_t storage_size = sizeof(StorageType);
+    static constexpr std::size_t storage_align = alignof(StorageType);
+
+    static constexpr std::size_t align = std::max(discrim_align, storage_align);
+    static constexpr std::size_t size = round_to_multiple(discrim_size, align) +
+                                        round_to_multiple(storage_size, align);
+
+};
+
+template <typename S>
+struct status_storage_traits;
+
+template <typename M, typename... Es>
+struct status_storage_traits<varerr::BasicStatus<M, Es...>> : status_storage_traits_impl<Es...> {};
+
+template <varerr::IsStatus S>
+constexpr std::size_t status_alignof_v = status_storage_traits<S>::align;
+
+template <varerr::IsStatus S>
+constexpr std::size_t status_sizeof_v = status_storage_traits<S>::size;
 
 // VisitorVoidConstL binds every value type.
 
@@ -195,6 +229,8 @@ struct VisitorAsConstRValueVoid {
 
 } // namespace
 
+// Triviality tests.
+
 TEMPLATE_TEST_CASE("varerr_status_trivial", "[varerr][status]",
     HomStatus<0>, HomStatus<3>, (HetStatus<0, 3>), (HetStatus<3, 3>)
 ) {
@@ -220,6 +256,8 @@ TEST_CASE("varerr_status_trivial_default", "[varerr][status]") {
     STATIC_REQUIRE_FALSE(std::is_trivially_default_constructible_v<TrivialStatus>);
 
 }
+
+// Constructibility and assignability tests.
 
 TEST_CASE("varerr_status_construct_empty", "[varerr][status]") {
 
@@ -375,23 +413,25 @@ TEST_CASE("varerr_status_assign", "[varerr][status]") {
 
     // Copy assignment preserves the discriminator and active alternative.
 
-    B0 source_copy { std::in_place_type<E<3>>, std::size_t {42} };
-    B0 target_copy { std::in_place_type<E<1>>, std::size_t {43} };
-    target_copy = source_copy; // copy assignment
-
-    REQUIRE(target_copy.holds<E<3>>());
-    REQUIRE(target_copy.get<E<3>>().value() == 42);
-    REQUIRE(target_copy.index() == source_copy.index());
+    STATIC_REQUIRE([]() -> bool {
+        B0 source_copy { std::in_place_type<E<3>>, std::size_t {42} };
+        B0 target_copy { std::in_place_type<E<1>>, std::size_t {43} };
+        target_copy = source_copy; // copy assignment
+        return target_copy.holds<E<3>>() &&
+               target_copy.get<E<3>>().value() == 42 &&
+               target_copy.index() == source_copy.index();
+    }() == true);
 
     // Move assignment preserves the discriminator and active alternative.
 
-    B0 source_move { std::in_place_type<E<3>>, std::size_t {42} };
-    B0 target_move { std::in_place_type<E<1>>, std::size_t {43} };
-    target_move = std::move(source_move); // NOLINT
-
-    REQUIRE(target_move.holds<E<3>>());
-    REQUIRE(target_move.get<E<3>>().value() == 42);
-    REQUIRE(target_move.index() == source_move.index());
+    STATIC_REQUIRE([]() -> bool {
+        B0 source_move { std::in_place_type<E<3>>, std::size_t {42} };
+        B0 target_move { std::in_place_type<E<1>>, std::size_t {43} };
+        target_move = std::move(source_move); // NOLINT
+        return target_move.holds<E<3>>() &&
+               target_move.get<E<3>>().value() == 42 &&
+               target_move.index() == source_move.index();
+    }() == true);
 
 }
 
@@ -420,48 +460,54 @@ TEST_CASE("varerr_status_assign_widen", "[varerr][status]") {
     // Widening copy assignment preserves the index and active alternative when
     // the active alternative is part of shared prefix.
 
-    StatusBase source_copy_prefix { std::in_place_type<E<3>>, std::size_t {42} };
-    StatusPrefixed target_copy_prefix { std::in_place_type<E<1>>, std::size_t {43} };
-    target_copy_prefix = source_copy_prefix;
-
-    REQUIRE(target_copy_prefix.holds<E<3>>());
-    REQUIRE(target_copy_prefix.get<E<3>>().value() == 42);
-    REQUIRE(target_copy_prefix.index() == varerr::row_index_normalized_v<UniverseE, E<3>, RowBase>);
+    STATIC_REQUIRE([]() -> bool {
+        StatusBase source_copy_prefix { std::in_place_type<E<3>>, std::size_t {42} };
+        StatusPrefixed target_copy_prefix { std::in_place_type<E<1>>, std::size_t {43} };
+        target_copy_prefix = source_copy_prefix;
+        return target_copy_prefix.holds<E<3>>() &&
+               target_copy_prefix.get<E<3>>().value() == 42 &&
+               target_copy_prefix.index() == varerr::row_index_normalized_v<UniverseE, E<3>, RowBase>;
+    }() == true);
 
     // Widening move assignment preserves the index and active alternative when
     // the active alternative is part of a shared prefix.
 
-    StatusBase source_move_prefix { std::in_place_type<E<3>>, std::size_t {42} };
-    StatusPrefixed target_move_prefix { std::in_place_type<E<1>>, std::size_t {43} };
-    target_move_prefix = std::move(source_move_prefix); // NOLINT
-
-    REQUIRE(target_move_prefix.holds<E<3>>());
-    REQUIRE(target_move_prefix.get<E<3>>().value() == 42);
-    REQUIRE(target_move_prefix.index() == varerr::row_index_normalized_v<UniverseE, E<3>, RowBase>);
+    STATIC_REQUIRE([]() -> bool {
+        StatusBase source_move_prefix { std::in_place_type<E<3>>, std::size_t {42} };
+        StatusPrefixed target_move_prefix { std::in_place_type<E<1>>, std::size_t {43} };
+        target_move_prefix = std::move(source_move_prefix); // NOLINT
+        return target_move_prefix.holds<E<3>>() &&
+               target_move_prefix.get<E<3>>().value() == 42 &&
+               target_move_prefix.index() == varerr::row_index_normalized_v<UniverseE, E<3>, RowBase>;
+    }() == true);
 
     // Widening copy assignment preserves the active alternative but not the in-
     // dex when the active alternative is not part of a shared prefix.
 
-    StatusBase source_copy_noprefix { std::in_place_type<E<3>>, std::size_t {42} };
-    StatusUnPrefixed target_copy_noprefix { std::in_place_type<E<1>>, std::size_t {43} };
-    target_copy_noprefix = source_copy_noprefix;
-
-    REQUIRE(target_copy_noprefix.holds<E<3>>());
-    REQUIRE(target_copy_noprefix.get<E<3>>().value() == 42);
-    REQUIRE(target_copy_noprefix.index() == varerr::row_index_normalized_v<UniverseE, E<3>, RowUnPrefixed>);
+    STATIC_REQUIRE([]() -> bool {
+        StatusBase source_copy_noprefix { std::in_place_type<E<3>>, std::size_t {42} };
+        StatusUnPrefixed target_copy_noprefix { std::in_place_type<E<1>>, std::size_t {43} };
+        target_copy_noprefix = source_copy_noprefix;
+        return target_copy_noprefix.holds<E<3>>() &&
+               target_copy_noprefix.get<E<3>>().value() == 42 &&
+               target_copy_noprefix.index() == varerr::row_index_normalized_v<UniverseE, E<3>, RowUnPrefixed>;
+    }() == true);
 
     // Widening move assignment preserves the active alternative but not the in-
     // dex when the active alternative is not part of a shared prefix.
 
-    StatusBase source_move_noprefix { std::in_place_type<E<3>>, std::size_t {42} };
-    StatusUnPrefixed target_move_noprefix { std::in_place_type<E<1>>, std::size_t {43} };
-    target_move_noprefix = std::move(source_move_noprefix); // NOLINT
-
-    REQUIRE(target_move_noprefix.holds<E<3>>());
-    REQUIRE(target_move_noprefix.get<E<3>>().value() == 42);
-    REQUIRE(target_move_noprefix.index() == varerr::row_index_normalized_v<UniverseE, E<3>, RowUnPrefixed>);
+    STATIC_REQUIRE([]() -> bool {
+        StatusBase source_move_noprefix { std::in_place_type<E<3>>, std::size_t {42} };
+        StatusUnPrefixed target_move_noprefix { std::in_place_type<E<1>>, std::size_t {43} };
+        target_move_noprefix = std::move(source_move_noprefix); // NOLINT
+        return target_move_noprefix.holds<E<3>>() &&
+               target_move_noprefix.get<E<3>>().value() == 42 &&
+               target_move_noprefix.index() == varerr::row_index_normalized_v<UniverseE, E<3>, RowUnPrefixed>;
+    }() == true);
 
 }
+
+// Constraints tests.
 
 TEST_CASE("varerr_status_constraints_default", "[varerr][status]") {
 
@@ -793,6 +839,8 @@ TEST_CASE("varerr_status_constraints_exact", "[varerr][status]") {
 
 }
 
+// Exception specification tests.
+
 TEST_CASE("varerr_status_noexcept_default", "[varerr][status]") {
 
     using RowDefCon = varerr::Row<E<0>, DefaultThrowType>;
@@ -938,5 +986,78 @@ TEST_CASE("varerr_status_noexcept_visit", "[varerr][status]") {
         constexpr bool is_throwing = std::is_rvalue_reference_v<T&&> && !std::is_const_v<std::remove_reference_t<T>>;
         STATIC_REQUIRE(is_noexcept == !is_throwing);
     });
+
+}
+
+// Storage and layout tests.
+
+TEST_CASE("varerr_status_memory", "[varerr][status]") {
+
+    constexpr std::size_t kTestSizeBound = 33;
+    constexpr std::size_t kTestLogAlignBound = 9;
+
+    // The alignment is the alignment of the widest alternative (modulo the dis-
+    // criminator). The size is the size of the widest alternative rounded up to
+    // the alignment of the strictest alternative (modulo the discriminator).
+
+    iterate_index_sequence<kTestSizeBound>([]<std::size_t N>(const index_constant<N>) -> void {
+        if constexpr (N > 0) {
+            iterate_index_sequence<kTestLogAlignBound>([]<std::size_t A>(const index_constant<A>) -> void {
+                using TestType = HetStatus<N, A>;
+                STATIC_REQUIRE(sizeof(TestType) == status_sizeof_v<TestType>);
+                STATIC_REQUIRE(alignof(TestType) == status_alignof_v<TestType>);
+            });
+        }
+    });
+
+}
+
+TEST_CASE("varerr_status_memory_discriminator", "[varerr][status]") {
+
+    constexpr std::size_t uint_least8_holds = std::numeric_limits<std::uint_least8_t>::max() + 1;
+    constexpr std::size_t uint_least16_holds = std::numeric_limits<std::uint_least16_t>::max() + 1;
+
+    STATIC_REQUIRE(std::same_as<varerr::status_discriminator_t<uint_least8_holds>, std::uint_least8_t>);
+    STATIC_REQUIRE(std::same_as<varerr::status_discriminator_t<uint_least8_holds + 1>, std::uint_least16_t>);
+    STATIC_REQUIRE(std::same_as<varerr::status_discriminator_t<uint_least16_holds>, std::uint_least16_t>);
+    STATIC_REQUIRE(std::same_as<varerr::status_discriminator_t<uint_least16_holds + 1>, std::uint_least32_t>);
+
+    // The size and alignment invariants are satisfied when the discriminator
+    // width is varied.
+
+    iterate_index_array<uint_least8_holds, uint_least8_holds + 1>([]<std::size_t N>(const index_constant<N>) -> void {
+        using StatusType = HomStatus<N>;
+        STATIC_REQUIRE(sizeof(StatusType) == status_sizeof_v<StatusType>);
+        STATIC_REQUIRE(alignof(StatusType) == status_alignof_v<StatusType>);
+    });
+
+}
+
+TEMPLATE_TEST_CASE("varerr_status_memory_mixed", "[varerr][status]",
+    (varerr::Row<H<40, 0>, H<1, 4>>),
+    (varerr::Row<H<1, 4>, H<40, 0>>)
+) {
+
+    using TestRow = TestType;
+    using TestUniverse = pack_apply_t<bind_adapter<UniverseT>, TestRow>;
+    using TestStatus = varerr::status_from_row_t<TestUniverse, TestRow>;
+
+    // The widest and strictest alternative need not be the same type. H<40, 0>
+    // is 40 bytes with 1-bytes alignment while H<1, 4> is 1 byte with 16-byte
+    // alignment. In both cases we
+
+    STATIC_REQUIRE(sizeof(TestStatus) == status_sizeof_v<TestStatus>);
+    STATIC_REQUIRE(alignof(TestStatus) == status_alignof_v<TestStatus>);
+    STATIC_REQUIRE(sizeof(TestStatus) == 64);
+
+}
+
+TEST_CASE("varerr_status_memory_empty", "[varerr][status]") {
+
+    // The size and alignment of the empty status is one byte on every target
+    // implementation. The standard only requires them to be positive.
+
+    STATIC_REQUIRE(sizeof(HomStatus<0>) == 1);
+    STATIC_REQUIRE(alignof(HomStatus<0>) == 1);
 
 }

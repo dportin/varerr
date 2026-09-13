@@ -214,17 +214,6 @@ struct BasicStatus final {
         discrim_ { static_cast<DiscrimType>(row_index_normalized_v<M, E, Row<Es...>>) },
         storage_ { std::in_place_index<row_index_normalized_v<M, E, Row<Es...>>>, std::forward<Args>(args)... } {}
 
-    // TODO: Remove the forwarding constructor (which exists primarily to enab-
-    // le the BasicResult(Error<E>&&) and BasicResult(const Error<E>&) construct-
-    // ors. It overlaps with the copy and move constructors and is ambiguous -
-    // and at most wrong - when E is the BasicStatus type itself.
-
-    template <typename E>
-    requires row_elem_normalized_v<M, std::remove_cvref_t<E>, Row<Es...>>
-    constexpr BasicStatus(E&& e)
-    noexcept(std::is_nothrow_constructible_v<E, E>) :
-        BasicStatus(std::in_place_type<E>, std::forward<E>(e)) {}
-
     // The widening constructor leaves the class members deliberately uninitial-
     // ized before invoking the visitor. P1331R2 permits uninitialized class me-
     // mbers in constexpr contexts provided that the uninitialized class members

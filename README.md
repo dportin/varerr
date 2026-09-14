@@ -33,6 +33,7 @@ Clang-Tidy is enabled for all configurations. IWYU is enabled only for Clang con
 
 ## TODO
 
+- Consider replacing `std::in_place_type_t` in `BasicResult` error constructor with custom `error_t`.
 - Equality operator for `BasicStatus` and `BasicResult`.
 - Move copy/move constructibility static assertions to class constraints for `BasicStatus` and `BasicResult`.
 - Refactor `result.hpp` and implement tests.

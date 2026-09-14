@@ -7,6 +7,7 @@ add_executable(${PROJECT_NAME}_tests_main
     "test_storage.cpp"
     "test_algebra.cpp"
     "test_status.cpp"
+    "test_result.cpp"
 )
 
 target_link_libraries(${PROJECT_NAME}_tests_main PRIVATE

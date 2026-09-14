@@ -18,42 +18,6 @@
 
 namespace varerr {
 
-template <typename E>
-struct Error {
-
-    constexpr explicit Error(const E& e)
-    noexcept(std::is_nothrow_copy_constructible_v<E>) :
-        error_(e) {}
-
-    constexpr explicit Error(E&& e)
-    noexcept(std::is_nothrow_move_constructible_v<E>) :
-        error_(std::move(e)) {}
-
-    template <typename... Args>
-    requires std::constructible_from<E, Args&&...>
-    constexpr explicit Error(std::in_place_t, Args&&... args)
-    noexcept(std::is_nothrow_constructible_v<E, Args&&...>) :
-        error_(std::forward<Args>(args)...) {}
-
-    [[nodiscard]] constexpr const E& unwrap() const & {
-        return this->error_;
-    }
-
-    [[nodiscard]] constexpr E&& unwrap() && {
-        return std::move(this->error_);
-    }
-
-    private:
-
-    E error_;
-
-};
-
-// Deduces std::remove_cvref_t<E> from E&& since Error boxes the value.
-
-template <typename E>
-Error(E&&) -> Error<std::remove_cvref_t<E>>;
-
 namespace detail {
 
 template <typename F, typename Self, typename T>
@@ -186,6 +150,21 @@ struct BasicResult final {
     requires IsNormalizedPack<N, Fs...>
     friend struct BasicResult;
 
+    // The following invariants are inherited from the status type but repeated
+    // here for documentation.
+
+    static_assert((std::is_trivially_copyable_v<Es> && ...),
+        "BasicResult: alternatives must be trivially copyable");
+
+    static_assert((std::is_trivially_destructible_v<Es> && ...),
+        "BasicResult: alternatives must be trivially destructible");
+
+    static_assert((std::is_nothrow_copy_constructible_v<Es> && ...),
+        "BasicResult: alternatives must be nothrow copy-constructible");
+
+    static_assert((std::is_nothrow_move_constructible_v<Es> && ...),
+        "BasicResult: alternatives must be nothrow move-constructible");
+
     // Construct BasicResult from T.
 
     template <typename... Args>
@@ -194,23 +173,14 @@ struct BasicResult final {
     noexcept(std::is_nothrow_constructible_v<T, Args...>) :
         result_ { std::in_place, std::forward<Args>(args) ... } {}
 
-    // Construct a BasicResult from an Error.
+    // Construct BasicResult from E.
 
-    // TODO: the Error<E> constructors depend on the BasicStatus(E&&) forwarding
-    // constructor, which overlaps in some cases with the default copy and move
-    // constructors. Consider a different design here.
-
-    template <typename E>
-    requires row_elem_normalized_v<M, E, Row<Es...>>
-    constexpr BasicResult(const Error<E>& e)
-    noexcept(noexcept(ResultType(std::unexpected(std::declval<const E&>())))) /* TODO: noexcept(true) */ :
-        result_(std::unexpected(e.unwrap())) {}
-
-    template <typename E>
-    requires row_elem_normalized_v<M, E, Row<Es...>>
-    constexpr BasicResult(Error<E>&& e)
-    noexcept(noexcept(ResultType(std::unexpected(std::declval<E&&>())))) /* TODO: noexcept(true) */ :
-        result_(std::unexpected(std::move(e).unwrap())) {}
+    template <typename E, typename... Args>
+    requires IsElemExactInRow<M, Row<Es...>, E> &&
+             std::constructible_from<E, Args...>
+    explicit constexpr BasicResult(std::in_place_type_t<E>, Args&&... args)
+    noexcept(std::is_nothrow_constructible_v<E, Args...>) :
+        result_ { std::unexpect, ErrorType { std::in_place_type<E>, std::forward<Args>(args)... } } {}
 
     // Implicit widening constructor.
 

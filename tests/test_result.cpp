@@ -104,6 +104,11 @@ concept IsResultValueIfWellFormed = requires {
     std::declval<R>().value_if();
 };
 
+template <typename R>
+concept IsResultTakeWellFormed = requires {
+    std::declval<R>().take();
+};
+
 template <typename R, typename E>
 concept IsResultErrorIfWellFormed = requires {
     std::declval<R>().template error_if<E>();
@@ -345,6 +350,25 @@ TEMPLATE_TEST_CASE("varerr_result_constraints_value", "[varerr][result]",
 
 }
 
+TEMPLATE_TEST_CASE("varerr_result_constraints_take", "[varerr][result]",
+    (HomResult<void, 0>),
+    (HomResult<void, 3, 1, 2>),
+    (HomResult<TrivialType, 0>),
+    (HomResult<TrivialType, 3, 1, 2>)
+) {
+
+    using ResultType = TestType;
+    using ValueType = varerr::result_value_t<ResultType>;
+
+    iterate_cvref_matrix<ResultType>([]<typename T>(const std::type_identity<T>) -> void {
+        constexpr bool is_void = std::is_void_v<ValueType>;
+        constexpr bool is_volatile = std::is_volatile_v<std::remove_reference_t<T>>;
+        constexpr bool is_empty_row = varerr::row_size_v<varerr::result_row_t<T>> == 0;
+        STATIC_REQUIRE(IsResultTakeWellFormed<T> == (!is_void && !is_volatile && is_empty_row));
+    });
+
+}
+
 TEMPLATE_TEST_CASE("varerr_result_constraints_error_if", "[varerr][result]",
     (HomResult<void, 0>),
     (HomResult<void, 3, 1, 2>),
@@ -419,6 +443,10 @@ TEST_CASE("varerr_result_noexcept_value", "[varerr][result]") {
     REQUIRE(false);
 }
 
+TEST_CASE("varerr_result_noexcept_take", "[varerr][result]") {
+    REQUIRE(false);
+}
+
 TEST_CASE("varerr_result_return_value_if", "[varerr][result]") {
     REQUIRE(false);
 }
@@ -447,10 +475,22 @@ TEST_CASE("varerr_result_functional_holds_error", "[varerr][result]") {
     REQUIRE(false);
 }
 
-TEST_CASE("varerr_result_functional_holds_value_if", "[varerr][result]") {
+TEST_CASE("varerr_result_functional_value_if", "[varerr][result]") {
     REQUIRE(false);
 }
 
-TEST_CASE("varerr_result_functional_holds_value", "[varerr][result]") {
+TEST_CASE("varerr_result_functional_value", "[varerr][result]") {
+    REQUIRE(false);
+}
+
+TEST_CASE("varerr_result_functional_take") {
+    REQUIRE(false);
+}
+
+TEST_CASE("varerr_result_functional_error_if") {
+    REQUIRE(false);
+}
+
+TEST_CASE("varerr_result_functional_error") {
     REQUIRE(false);
 }

@@ -354,6 +354,20 @@ struct BasicResult final {
         return std::forward_like<Self>(*self.result_);
     }
 
+    // Return a reference to the value if the error row is empty. The deduced
+    // object parameter must be non-volatile. The assymetry with BasicStatus
+    // and value_if() is intentional since T has non-trivial move semantics.
+
+    template <typename Self>
+    requires IsNonVoid<T> &&
+             IsNonVolatile<Self> &&
+             IsEmptyRow<Row<Es...>>
+    // NOLINTNEXTLINE(cppcoreguidelines-missing-std-forward)
+    [[nodiscard]] constexpr forward_voidable_argument_t<Self, T> take(this Self&& self) noexcept {
+        assert(self.has_value() && "BasicResult::take: value branch not active");
+        return std::forward_like<Self>(*self.result_);
+    }
+
     // Return a pointer to error alternative E or nullptr if the error branch is
     // not active or E is not the active error alternative. The deduced object
     // parameter must be a non-volatile lvalue.
@@ -378,23 +392,13 @@ struct BasicResult final {
     requires IsNonVolatileLValueReference<Self> &&
              IsElemExactInRow<M, Row<Es...>, E>
     // NOLINTNEXTLINE(cppcoreguidelines-missing-std-forward)
-    [[nodiscard]] constexpr transfer_const_t<Self, E>& error(this Self&& self) {
+    [[nodiscard]] constexpr transfer_const_t<Self, E>& error(this Self&& self) noexcept {
         auto pointer = self.template error_if<E>();
         assert(pointer && "BasicResult::error: error branch not active");
         return *pointer;
     }
 
-    // RESUME REFACTORING HERE
-
-    // Return the value unconditionally when the error row is empty.
-
-    template <typename Self>
-    requires (sizeof...(Es) == 0) &&
-             (!std::is_void_v<T>)
-    [[nodiscard]] constexpr auto&& take(this Self&& self) {
-        assert(self.has_value());
-        return std::forward<Self>(self).value();
-    }
+    // RESUME REFACTORING
 
     // The transform (fmap) combinator.
 

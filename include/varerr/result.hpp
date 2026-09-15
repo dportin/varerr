@@ -10,6 +10,7 @@
 #include <concepts>
 #include <expected>
 #include <functional>
+#include <linux/limits.h>
 #include <memory>
 #include <type_traits>
 #include <utility>
@@ -36,6 +37,83 @@ template <typename F, typename Self, typename T>
 using forwarding_voidable_invoke_result_t = forwarding_voidable_invoke_result<F, Self, T>::type;
 
 } // namespace detail
+
+// Return T with the value category of Self.
+
+template <typename Self, typename T>
+using forward_argument_t = decltype(std::forward_like<Self>(std::declval<T&>()));
+
+// Determine whether a voidable T is constructible from Args.
+
+namespace detail {
+
+template <typename T, typename... Args>
+struct is_voidable_constructible : std::bool_constant<std::is_constructible_v<T, Args...>> {};
+
+template <typename... Args>
+struct is_voidable_constructible<void, Args...> : std::bool_constant<sizeof...(Args) == 0> {};
+
+} // namespace detail
+
+template <typename T, typename... Args>
+inline constexpr bool is_voidable_constructible_v = detail::is_voidable_constructible<T, Args...>::value;
+
+template <typename T, typename... Args>
+concept IsVoidableConstructible = is_voidable_constructible_v<T, Args...>;
+
+// Determine whether a voidable T is constructible from itself.
+
+namespace detail {
+
+template <typename Self, typename T>
+struct is_voidable_constructible_like : is_voidable_constructible<T, forward_argument_t<Self, T>> {};
+
+template <typename Self>
+struct is_voidable_constructible_like<Self, void> : std::true_type {};
+
+} // namespace detail
+
+template <typename Self, typename T>
+inline constexpr bool is_voidable_constructible_like_v = detail::is_voidable_constructible_like<Self, T>::value;
+
+template <typename Self, typename T>
+concept IsVoidableConstructibleLike = is_voidable_constructible_like_v<Self, T>;
+
+// Determine whether a voidable T is nothrow constructible from Args.
+
+namespace detail {
+
+template <typename T, typename... Args>
+struct is_nothrow_voidable_constructible : std::bool_constant<std::is_nothrow_constructible_v<T, Args...>> {};
+
+template <typename... Args>
+struct is_nothrow_voidable_constructible<void, Args...> : std::bool_constant<sizeof...(Args) == 0> {};
+
+} // namespace detail
+
+template <typename T, typename... Args>
+inline constexpr bool is_nothrow_voidable_constructible_v = detail::is_nothrow_voidable_constructible<T, Args...>::value;
+
+template <typename T, typename... Args>
+concept IsNothrowVoidableConstructible = is_nothrow_voidable_constructible_v<T, Args...>;
+
+// Determine whether a voidable T is nothrow constructible from itself.
+
+namespace detail {
+
+template <typename Self, typename T>
+struct is_nothrow_voidable_constructible_like : is_nothrow_voidable_constructible<T, forward_argument_t<Self, T>> {};
+
+template <typename Self>
+struct is_nothrow_voidable_constructible_like<Self, void> : std::true_type {};
+
+} // namespace detail
+
+template <typename Self, typename T>
+inline constexpr bool is_nothrow_voidable_constructible_like_v = detail::is_nothrow_voidable_constructible_like<Self, T>::value;
+
+template <typename Self, typename T>
+concept IsNothrowVoidableConstructibleLike = is_nothrow_voidable_constructible_like_v<Self, T>;
 
 // Destructure a BasicResult into its components.
 
@@ -146,6 +224,14 @@ template <typename M, typename T, IsTriviallyStorable... Es>
 requires IsNormalizedPack<M, Es...>
 struct BasicResult final {
 
+    private:
+
+    using ValueType = T;
+    using ErrorType = BasicStatus<M, Es...>;
+    using ResultType = std::expected<ValueType, ErrorType>;
+
+    public:
+
     template <typename N, typename R, IsTriviallyStorable... Fs>
     requires IsNormalizedPack<N, Fs...>
     friend struct BasicResult;
@@ -165,15 +251,15 @@ struct BasicResult final {
     static_assert((std::is_nothrow_move_constructible_v<Es> && ...),
         "BasicResult: alternatives must be nothrow move-constructible");
 
-    // Construct BasicResult from T.
+    // Construct a BasicResult from a value T.
 
     template <typename... Args>
-    requires std::is_void_v<T> || std::constructible_from<T, Args...>
+    requires IsVoidableConstructible<T, Args...>
     explicit constexpr BasicResult(std::in_place_t, Args&&... args)
-    noexcept(std::is_nothrow_constructible_v<T, Args...>) :
+    noexcept(is_nothrow_voidable_constructible_v<T, Args...>) :
         result_ { std::in_place, std::forward<Args>(args) ... } {}
 
-    // Construct BasicResult from E.
+    // Construct a BasicResult from an alternative E.
 
     template <typename E, typename... Args>
     requires IsElemExactInRow<M, Row<Es...>, E> &&
@@ -182,21 +268,18 @@ struct BasicResult final {
     noexcept(std::is_nothrow_constructible_v<E, Args...>) :
         result_ { std::unexpect, ErrorType { std::in_place_type<E>, std::forward<Args>(args)... } } {}
 
-    // Implicit widening constructor.
+    // Construct a BasicResult from a narrower BasicResult via widening.
 
-    template <IsTriviallyStorable... Fs>
-    requires IsNormalizedPack<M, Fs...> &&
-                row_proper_subset_normalized_v<M, Row<Fs...>, Row<Es...>>
-    constexpr BasicResult(const BasicResult<M, T, Fs...>& other)
-    noexcept(noexcept(widen(other))) :
-        result_(widen(other)) {}
-
-    template <IsTriviallyStorable... Fs>
-    requires IsNormalizedPack<M, Fs...> &&
-                row_proper_subset_normalized_v<M, Row<Fs...>, Row<Es...>>
-    constexpr BasicResult(BasicResult<M, T, Fs...>&& other)
-    noexcept(noexcept(widen(std::move(other)))) :
-        result_(widen(std::move(other))) {}
+    template <typename Narrow>
+    requires IsResult<Narrow> &&
+             std::same_as<result_value_t<Narrow>, T> &&
+             std::same_as<result_universe_t<Narrow>, M> &&
+             IsNormalizedRow<M, result_row_t<Narrow>> &&
+             row_proper_subset_normalized_v<M, result_row_t<Narrow>, Row<Es...>> &&
+             IsRowExactInRow<M, Row<Es...>, result_row_t<Narrow>>
+    constexpr BasicResult(Narrow&& narrow)
+    noexcept(is_nothrow_voidable_constructible_like_v<Narrow, T>) :
+        result_ { BasicResult::widen(std::forward<Narrow>(narrow)) } {}
 
     // Boolean observers
 
@@ -416,36 +499,35 @@ struct BasicResult final {
 
     private:
 
-    using ValueType = T;
-    using ErrorType = BasicStatus<M, Es...>;
-    using ResultType = std::expected<ValueType, ErrorType>;
+    // The widening helper is unconditionally noexcept except when the value T
+    // is present and non-void. In that case the noexcept specification tracks
+    // the in-place construction of T from (the forwarded value of) itself.
+
+    template <typename Narrow>
+    [[nodiscard]] static constexpr ResultType widen(Narrow&& narrow)
+    noexcept(is_nothrow_voidable_constructible_like_v<Narrow, T>) {
+
+        if (narrow.has_value()) {
+            if constexpr (std::is_void_v<T>) {
+                return ResultType(std::in_place);
+            } else {
+                return ResultType(std::in_place, std::forward<Narrow>(narrow).value());
+            }
+        }
+
+        if constexpr (IsNonEmptyRow<result_row_t<Narrow>>) {
+            return ResultType(std::unexpect, ErrorType(std::forward<Narrow>(narrow).status()));
+        } else {
+            std::unreachable();
+        }
+
+    }
 
     template <typename Self>
     requires IsNonEmptyRow<Row<Es...>>
     [[nodiscard]] constexpr decltype(auto) status(this Self&& self) noexcept {
         assert(self.has_error());
         return std::forward<Self>(self).result_.error();
-    }
-
-    // Explicit widening helper
-
-    template <typename Other> /* unconstrained */
-    [[nodiscard]] static constexpr ResultType widen(Other&& other)
-    noexcept(noexcept(ResultType(std::in_place, std::forward<Other>(other).value()))) {
-
-        static_assert(is_result_impl_v<Other>);
-        using ErrRow = result_row_t<std::remove_cvref_t<Other>>;
-
-        if (other.has_value()) {
-            return ResultType(std::in_place, std::forward<Other>(other).value());
-        }
-
-        if constexpr (row_size_v<ErrRow> > 0) {
-            return ResultType(std::unexpect, BasicStatus<M, Es...>(std::forward<Other>(other).status())); /* noexcept */
-        } else {
-            std::unreachable();
-        }
-
     }
 
     ResultType result_;

@@ -107,6 +107,26 @@ using bind_lift_adapter = bind_lift<bind_meta_adapter<F, Args...>>;
 template <template <typename...> typename F, typename... Args>
 using bind_lift_back_adapter = bind_lift<bind_meta_back_adapter<F, Args...>>;
 
+// The boolean adapter folds a metapredicate P over a parameter pack.
+
+template <template <typename...> typename P, typename... Args>
+struct bind_conjunction_adapter {
+    template <typename... Es>
+    using bind = std::bool_constant<(P<Args..., Es>::value && ...)>;
+};
+
+template <template <typename...> typename P, typename... Args>
+struct bind_disjunction_adapter {
+    template <typename... Es>
+    using bind = std::bool_constant<(P<Args..., Es>::value || ...)>;
+};
+
+template <template <typename...> typename P, typename M, typename... Args>
+concept IsPredAllOf = pack_apply_v<bind_conjunction_adapter<P, Args...>, M>;
+
+template <template <typename...> typename P, typename M, typename... Args>
+concept IsPredAnyOf = pack_apply_v<bind_disjunction_adapter<P, Args...>, M>;
+
 } // namespace varerr
 
 #endif // VARERR_UTILITIES_HPP

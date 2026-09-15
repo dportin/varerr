@@ -36,11 +36,19 @@ TEST_CASE("varerr_result_construct_emplace_error", "[varerr][result]") {
     REQUIRE(false);
 }
 
+TEST_CASE("varerr_result_construct_widen", "[varerr][result]") {
+    REQUIRE(false);
+}
+
 TEST_CASE("varerr_result_constraints_emplace_value", "[varerr][result]") {
     REQUIRE(false);
 }
 
 TEST_CASE("varerr_result_constraints_emplace_error", "[varerr][result]") {
+    REQUIRE(false);
+}
+
+TEST_CASE("varerr_result_constraints_widen", "[varerr][result]") {
     REQUIRE(false);
 }
 
@@ -52,10 +60,14 @@ TEST_CASE("varerr_result_noexcept_emplace_error", "[varerr][result]") {
     REQUIRE(false);
 }
 
-TEST_CASE("varerr_result_functional_emplace_value", "[varerr][result]") {
+TEST_CASE("varerr_result_noexcept_emplace_widen", "[varerr][result]") {
     REQUIRE(false);
 }
 
-TEST_CASE("varerr_result_functional_emplace_error", "[varerr][result]") {
+TEST_CASE("varerr_result_functional_emplace", "[varerr][result]") {
+    REQUIRE(false);
+}
+
+TEST_CASE("varerr_result_functional_widen", "[varerr][result]") {
     REQUIRE(false);
 }

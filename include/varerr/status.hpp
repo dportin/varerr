@@ -26,16 +26,16 @@ namespace varerr {
 
 namespace detail {
 
-template <typename... Es>
-struct is_trivially_storable_pack : std::bool_constant<(IsTriviallyStorable<Es> && ...)> {};
+template <typename E>
+struct is_trivially_storable : std::bool_constant<IsTriviallyStorable<E>> {};
 
 } // namespace detail
 
-template <typename... Es>
-concept IsTriviallyStorablePack = detail::is_trivially_storable_pack<Es...>::value;
-
 template <typename U>
-concept IsTriviallyStorableRow = IsRow<U> && pack_apply_v<bind_meta_adapter<detail::is_trivially_storable_pack>, U>;
+concept IsTriviallyStorableRow = IsRow<U> && IsPredAllOf<detail::is_trivially_storable, U>;
+
+template <typename... Es>
+concept IsTriviallyStorablePack = IsTriviallyStorableRow<Row<Es...>>;
 
 // The universe is required to assign distinct ranks to distinct unqualified ty-
 // pes. This cannot be enforced statically. To mitigate rank-collision errors we
@@ -51,8 +51,18 @@ concept IsElemExactInRow =
     row_elem_normalized_v<M, E, U> &&
     std::same_as<E, detail::row_subscript_t<row_index_normalized_v<M, E, U>, U>>;
 
-template <typename M, typename U, typename... Es>
-concept IsPackExactInRow = IsRow<U> && (IsElemExactInRow<M, U, Es> && ...);
+namespace detail {
+
+template <typename M, typename U, typename E>
+struct is_elem_exact_in_row : std::bool_constant<IsElemExactInRow<M, U, E>> {};
+
+} // namespace detail
+
+template <typename M, typename V, typename U>
+concept IsRowExactInRow = IsRow<U> && IsRow<V> && IsPredAllOf<detail::is_elem_exact_in_row, U, M, V>;
+
+template <typename M, typename V, typename... Es>
+concept IsPackExactInRow = IsRowExactInRow<M, V, Row<Es...>>;
 
 namespace detail {
 

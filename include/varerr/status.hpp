@@ -216,8 +216,7 @@ struct BasicStatus final {
     // Construct a BasicStatus from an alternative.
 
     template <typename E, typename... Args>
-    requires IsTriviallyStorable<E> &&
-             IsElemExactInRow<M, Row<Es...>, E> &&
+    requires IsElemExactInRow<M, Row<Es...>, E> &&
              std::constructible_from<E, Args...>
     constexpr explicit BasicStatus(std::in_place_type_t<E>, Args&&... args)
     noexcept(std::is_nothrow_constructible_v<E, Args...>) :
@@ -251,8 +250,7 @@ struct BasicStatus final {
     // Determine whether E is the active alternative.
 
     template <typename E>
-    requires IsTriviallyStorable<E> &&
-             IsElemExactInRow<M, Row<Es...>, E>
+    requires IsElemExactInRow<M, Row<Es...>, E>
     [[nodiscard]] constexpr bool holds() const noexcept {
         return this->discrim_ == static_cast<DiscrimType>(row_index_normalized_v<M, E, Row<Es...>>);
     }
@@ -272,8 +270,7 @@ struct BasicStatus final {
     // active alternative. Returns nullptr if E is not the active alternative.
 
     template <typename E, typename Self>
-    requires IsTriviallyStorable<E> &&
-             IsElemExactInRow<M, Row<Es...>, E> &&
+    requires IsElemExactInRow<M, Row<Es...>, E> &&
              IsNonVolatileLValueReference<Self>
     // NOLINTNEXTLINE(cppcoreguidelines-missing-std-forward)
     [[nodiscard]] constexpr transfer_const_t<Self, E>* get_if(this Self&& self) noexcept  {
@@ -287,8 +284,7 @@ struct BasicStatus final {
     // the active alternative.
 
     template <typename E, typename Self>
-    requires IsTriviallyStorable<E> &&
-             IsElemExactInRow<M, Row<Es...>, E> &&
+    requires IsElemExactInRow<M, Row<Es...>, E> &&
              IsNonVolatileLValueReference<Self>
     // NOLINTNEXTLINE(cppcoreguidelines-missing-std-forward)
     [[nodiscard]] constexpr transfer_const_t<Self, E>& get(this Self&& self) noexcept {

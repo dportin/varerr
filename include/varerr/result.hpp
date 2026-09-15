@@ -289,7 +289,7 @@ struct BasicResult final {
     noexcept(is_nothrow_voidable_constructible_like_v<Narrow, T>) :
         result_ { BasicResult::widen(std::forward<Narrow>(narrow)) } {}
 
-    // Boolean observers
+    // Determine whether a BasicResult holds a value.
 
     [[nodiscard]] constexpr bool has_value() const noexcept {
         return this->result_.has_value();
@@ -299,17 +299,16 @@ struct BasicResult final {
         return this->has_value();
     }
 
+    // Determine whether a BasicResult holds an error.
+
     [[nodiscard]] constexpr bool has_error() const noexcept {
         return !this->has_value();
     }
 
     template <typename E>
+    requires IsElemExactInRow<M, Row<Es...>, E>
     [[nodiscard]] constexpr bool holds_error() const noexcept {
-        if constexpr (row_elem_normalized_v<M, E, Row<Es...>>) {
-            return this->has_error() && this->status().template holds<E>();
-        } else {
-            return false;
-        }
+        return this->has_error() && this->status().template holds<E>();
     }
 
     // Value accessors

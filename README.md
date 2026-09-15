@@ -33,6 +33,16 @@ Clang-Tidy is enabled for all configurations. IWYU is enabled only for Clang con
 
 ## TODO
 
+Regarding `volatile` qualifiers:
+
+- `BasicStatus<M, volatile E, Es...>` should be supported.
+- `BasicResult<M, volatile T, Es...>` should be supported.
+- In general the rationale for prohibiting `volatile` on `BasicStatus` and `BasicResult` is that volatile wrapper objects are not supported by the STL and volatile objects cannot use their implicit copy and move constructors. But a volatile *value* or *error* need have no such restriction. The error case is ruled out by the plain type requirement. The value case is undecided.
+
+Miscellaneous:
+
+- Replace `IsRankedPack && IsTriviallyStorable` with `IsErrorRow` throughout.
+- Define `IsUniverse` concept to validate existence of rank function.
 - Revisit explicitness of `BasicResult` value constructors for ergonomics.
 - Merge all four aliases of `visitor_argument_t` to `forwarded_argument_t`.
 - Consider replacing `std::in_place_type_t` in `BasicResult` error constructor with custom `error_t`.

@@ -195,19 +195,20 @@ struct index_bind_back_adapter {
 
 namespace detail {
 
-template <template <std::size_t> typename E, typename Is>
+template <template <std::size_t> typename E, std::size_t Offset, std::size_t Stride, typename Is>
 struct lift_index_sequence_impl;
 
-template <template <std::size_t> typename E, std::size_t... Is>
-struct lift_index_sequence_impl<E, std::index_sequence<Is...>> : std::type_identity<type_pack_t<E<Is>...>> {};
+template <template <std::size_t> typename E, std::size_t Offset, std::size_t Stride, std::size_t... Is>
+struct lift_index_sequence_impl<E, Offset, Stride, std::index_sequence<Is...>> :
+    std::type_identity<type_pack_t<E<Offset + Is * Stride>...>> {};
 
 } // namespace detail
 
-template <template <std::size_t> typename E, std::size_t N>
-struct lift_index_sequence : detail::lift_index_sequence_impl<E, std::make_index_sequence<N>> {};
+template <template <std::size_t> typename E, std::size_t N, std::size_t Offset = 0, std::size_t Stride = 1>
+struct lift_index_sequence : detail::lift_index_sequence_impl<E, Offset, Stride, std::make_index_sequence<N>> {};
 
-template <template <std::size_t> typename E, std::size_t N>
-using lift_index_sequence_t = lift_index_sequence<E, N>::type;
+template <template <std::size_t> typename E, std::size_t N, std::size_t Offset = 0, std::size_t Stride = 1>
+using lift_index_sequence_t = lift_index_sequence<E, N, Offset, Stride>::type;
 
 // Reverse the elements of a parameter pack.
 

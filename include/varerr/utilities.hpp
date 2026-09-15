@@ -14,6 +14,9 @@ using transfer_const_t = std::conditional_t<std::is_const_v<std::remove_referenc
 // Determine whether a type T is a non-volatile lvalue reference.
 
 template <typename T>
+concept IsNonVoid = !std::is_void_v<std::remove_reference_t<T>>;
+
+template <typename T>
 concept IsNonVolatile = !std::is_volatile_v<std::remove_reference_t<T>>;
 
 template <typename T>

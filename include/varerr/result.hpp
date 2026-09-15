@@ -38,10 +38,25 @@ using forwarding_voidable_invoke_result_t = forwarding_voidable_invoke_result<F,
 
 } // namespace detail
 
-// Return T with the value category of Self.
+// The forwarded value type of T.
 
 template <typename Self, typename T>
 using forward_argument_t = decltype(std::forward_like<Self>(std::declval<T&>()));
+
+// The forwarded value type of a voidable T.
+
+namespace detail {
+
+template <typename Self, typename T>
+struct forward_voidable_argument : std::type_identity<forward_argument_t<Self, T>> {};
+
+template <typename Self>
+struct forward_voidable_argument<Self, void> : std::type_identity<void> {};
+
+} // namespace detail
+
+template <typename Self, typename T>
+using forward_voidable_argument_t = detail::forward_voidable_argument<Self, T>::type;
 
 // Determine whether a voidable T is constructible from Args.
 
@@ -311,24 +326,32 @@ struct BasicResult final {
         return this->has_error() && this->status().template holds<E>();
     }
 
-    // Value accessors
+    // Return a pointer to the value or nullptr if the active branch is not ac-
+    // tive. The deduced object parameter must be a non-volatile lvalue.
 
     template <typename Self>
-    requires (!std::is_void_v<T>)
+    requires IsNonVoid<T> &&
+             IsNonVolatileLValueReference<Self>
     // NOLINTNEXTLINE(cppcoreguidelines-missing-std-forward)
-    [[nodiscard]] constexpr auto&& value(this Self&& self) {
-        assert(self.result_.has_value());
-        return std::forward_like<Self>(*self.result_);
-    }
-
-    template <typename Self>
-    requires (!std::is_void_v<T>)
-    [[nodiscard]] constexpr transfer_const_t<Self, T>* value_if(this Self& self) noexcept {
+    [[nodiscard]] constexpr transfer_const_t<Self, T>* value_if(this Self&& self) noexcept {
         if (self.has_value()) {
             return std::addressof(*self.result_);
         } else {
             return nullptr;
         }
+    }
+
+    // Return a reference to the value if the value branch is active. The deduc-
+    // ed object parameter must be non-volatile. The asymmetry with BasicStatus
+    // and value_if() is intentional since T has non-trivial move semantics.
+
+    template <typename Self>
+    requires IsNonVoid<T> &&
+             IsNonVolatile<Self>
+    // NOLINTNEXTLINE(cppcoreguidelines-missing-std-forward)
+    [[nodiscard]] constexpr forward_voidable_argument_t<Self, T> value(this Self&& self) noexcept {
+        assert(self.has_value() && "BasicResult::value: value not active");
+        return std::forward_like<Self>(*self.result_);
     }
 
     // Error accessors
@@ -541,31 +564,38 @@ struct BasicResult final {
 
 };
 
-namespace detail {
-
-// Unpack a Row into a BasicResult.
-
-template <typename M, typename T, typename U>
-struct basic_result_row_adapter;
+// Construct a BasicResult from a normalized or non-normalized parameter pack.
 
 template <typename M, typename T, typename... Es>
-requires IsNormalizedPack<M, Es...>
-struct basic_result_row_adapter<M, T, Row<Es...>> : std::type_identity<BasicResult<M, T, Es...>> {};
+requires IsTriviallyStorablePack<Es...> &&
+         IsNormalizedPack<M, Es...>
+using result_from_normalized_pack_t = BasicResult<M, Es...>;
+
+template <typename M, typename T, typename... Es>
+requires IsTriviallyStorablePack<Es...> &&
+         IsRankedPack<M, Es...>
+using result_from_pack_t = pack_apply_t<bind_lift_adapter<BasicResult, M, T>, pack_normalize_t<M, Es...>>;
+
+// Construct a BasicResult from a normalized or non-normalized Row.
 
 template <typename M, typename T, typename U>
-requires IsNormalizedRow<M, U>
-using basic_result_row_adapter_t = typename basic_result_row_adapter<M, T, U>::type;
+requires IsRow<U> &&
+         IsTriviallyStorableRow<U> &&
+         IsNormalizedRow<M, U>
+using result_from_normalized_row_t = pack_apply_t<bind_lift_adapter<BasicResult, M, T>, U>;
 
-} // namespace detail
+template <typename M, typename T, typename U>
+requires IsRow<U> &&
+         IsTriviallyStorableRow<U> &&
+         IsRankedRow<M, U>
+using result_from_row_t = result_from_normalized_row_t<M, T, row_normalize_t<M, U>>;
 
-// TODO: The public-facing concept should probably be named "IsErrorRow" rather
-// than "IsRankedPack" since that is an implementation detail. Should also have
-// a concept for "IsUniverse" to prevent error cascades when "R" does not provi-
-// de a rank function. Unfortunately we can't test injectivity.
+// The normalizing constructor is an alias for BasicResult.
 
-template <typename M, typename T, IsTriviallyStorable... Es>
-requires IsRankedPack<M, Es...>
-using Result = detail::basic_result_row_adapter_t<M, T, pack_normalize_t<M, Es...>>;
+template <typename M, typename T, typename... Es>
+requires IsTriviallyStorablePack<Es...> &&
+         IsRankedPack<M, Es...>
+using Result = result_from_pack_t<M, T, Es...>;
 
 } // namespace varerr
 

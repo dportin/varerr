@@ -293,17 +293,43 @@ static_assert(!std::is_move_assignable_v<NoMoveAssignType>);
 
 struct NonTrivialConstructType {
     int value_;
+    NonTrivialConstructType() = default;
+    ~NonTrivialConstructType() = default;
     NonTrivialConstructType(int value) : value_(value) {}
+    NonTrivialConstructType(const NonTrivialConstructType&) = default;
+    NonTrivialConstructType(NonTrivialConstructType&&) = default;
+    NonTrivialConstructType& operator=(const NonTrivialConstructType&) = default;
+    NonTrivialConstructType& operator=(NonTrivialConstructType&&) = default;
 };
 
 static_assert(std::is_constructible_v<NonTrivialConstructType, int>);
 static_assert(!std::is_trivially_constructible_v<NonTrivialConstructType, int>);
 
+// Default constructible but not trivially default constructible.
+
+struct NonTrivialDefaultConstructType {
+    int value_;
+    NonTrivialDefaultConstructType() noexcept {}
+    ~NonTrivialDefaultConstructType() = default;
+    NonTrivialDefaultConstructType(const NonTrivialDefaultConstructType&) = default;
+    NonTrivialDefaultConstructType(NonTrivialDefaultConstructType&&) = default;
+    NonTrivialDefaultConstructType& operator=(const NonTrivialDefaultConstructType&) = default;
+    NonTrivialDefaultConstructType& operator=(NonTrivialDefaultConstructType&&) = default;
+};
+
+static_assert(std::is_default_constructible_v<NonTrivialDefaultConstructType>);
+static_assert(!std::is_trivially_default_constructible_v<NonTrivialDefaultConstructType>);
+
 // Destructible but not trivially destructible.
 
 struct NonTrivialDestructType {
     int value_;
-    ~NonTrivialDestructType() {}
+    NonTrivialDestructType() = default;
+    ~NonTrivialDestructType() noexcept {}
+    NonTrivialDestructType(const NonTrivialDestructType&) = default;
+    NonTrivialDestructType(NonTrivialDestructType&&) = default;
+    NonTrivialDestructType& operator=(const NonTrivialDestructType&) = default;
+    NonTrivialDestructType& operator=(NonTrivialDestructType&&) = default;
 };
 
 static_assert(std::is_destructible_v<NonTrivialDestructType>);
@@ -313,7 +339,12 @@ static_assert(!std::is_trivially_destructible_v<NonTrivialDestructType>);
 
 struct NonTrivialCopyConstructType {
     int value_;
+    NonTrivialCopyConstructType() = default;
+    ~NonTrivialCopyConstructType() = default;
     NonTrivialCopyConstructType(const NonTrivialCopyConstructType&) {}
+    NonTrivialCopyConstructType(NonTrivialCopyConstructType&&) = default;
+    NonTrivialCopyConstructType& operator=(const NonTrivialCopyConstructType&) = default;
+    NonTrivialCopyConstructType& operator=(NonTrivialCopyConstructType&&) = default;
 };
 
 static_assert(std::is_copy_constructible_v<NonTrivialCopyConstructType>);
@@ -323,7 +354,12 @@ static_assert(!std::is_trivially_copy_constructible_v<NonTrivialCopyConstructTyp
 
 struct NonTrivialCopyAssignType {
     int value_;
+    NonTrivialCopyAssignType() = default;
+    ~NonTrivialCopyAssignType() = default;
+    NonTrivialCopyAssignType(const NonTrivialCopyAssignType&) = default;
+    NonTrivialCopyAssignType(NonTrivialCopyAssignType&&) = default;
     NonTrivialCopyAssignType& operator=(const NonTrivialCopyAssignType&) { return *this; } // NOLINT
+    NonTrivialCopyAssignType& operator=(NonTrivialCopyAssignType&&) = default;
 };
 
 static_assert(std::is_copy_assignable_v<NonTrivialCopyAssignType>);
@@ -333,7 +369,12 @@ static_assert(!std::is_trivially_copy_assignable_v<NonTrivialCopyAssignType>);
 
 struct NonTrivialMoveConstructType {
     int value_;
+    NonTrivialMoveConstructType() = default;
+    ~NonTrivialMoveConstructType() = default;
+    NonTrivialMoveConstructType(const NonTrivialMoveConstructType&) = default;
     NonTrivialMoveConstructType(NonTrivialMoveConstructType&&) noexcept {}
+    NonTrivialMoveConstructType& operator=(const NonTrivialMoveConstructType&) = default;
+    NonTrivialMoveConstructType& operator=(NonTrivialMoveConstructType&&) = default;
 };
 
 static_assert(std::is_move_constructible_v<NonTrivialMoveConstructType>);
@@ -343,7 +384,12 @@ static_assert(!std::is_trivially_move_constructible_v<NonTrivialMoveConstructTyp
 
 struct NonTrivialMoveAssignType {
     int value_;
-    NonTrivialMoveAssignType& operator=(NonTrivialMoveAssignType&&) { return *this; } // NOLINT
+    NonTrivialMoveAssignType() = default;
+    ~NonTrivialMoveAssignType() = default;
+    NonTrivialMoveAssignType(const NonTrivialMoveAssignType&) = default;
+    NonTrivialMoveAssignType(NonTrivialMoveAssignType&&) = default;
+    NonTrivialMoveAssignType& operator=(const NonTrivialMoveAssignType&) = default;
+    NonTrivialMoveAssignType& operator=(NonTrivialMoveAssignType&&) noexcept { return *this; } // NOLINT
 };
 
 static_assert(std::is_move_assignable_v<NonTrivialMoveAssignType>);
@@ -354,6 +400,11 @@ static_assert(!std::is_trivially_move_assignable_v<NonTrivialMoveAssignType>);
 struct NoDefaultConstructType {
     int value_;
     NoDefaultConstructType() = delete;
+    ~NoDefaultConstructType() = default;
+    NoDefaultConstructType(const NoDefaultConstructType&) = default;
+    NoDefaultConstructType(NoDefaultConstructType&&) = default;
+    NoDefaultConstructType& operator=(const NoDefaultConstructType&) = default;
+    NoDefaultConstructType& operator=(NoDefaultConstructType&&) = default;
 };
 
 static_assert(std::is_trivially_copyable_v<NoDefaultConstructType>);

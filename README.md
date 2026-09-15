@@ -33,6 +33,7 @@ Clang-Tidy is enabled for all configurations. IWYU is enabled only for Clang con
 
 ## TODO
 
+- Revisit explicitness of `BasicResult` value constructors for ergonomics.
 - Merge all four aliases of `visitor_argument_t` to `forwarded_argument_t`.
 - Consider replacing `std::in_place_type_t` in `BasicResult` error constructor with custom `error_t`.
 - Equality operator for `BasicStatus` and `BasicResult`.

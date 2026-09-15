@@ -268,6 +268,14 @@ struct BasicResult final {
     noexcept(std::is_nothrow_constructible_v<E, Args...>) :
         result_ { std::unexpect, ErrorType { std::in_place_type<E>, std::forward<Args>(args)... } } {}
 
+    // The default constructor is equivalent to the in-place value constructor
+    // with an empty argument list.
+
+    explicit constexpr BasicResult()
+    noexcept(is_nothrow_voidable_constructible_v<T>)
+    requires IsVoidableConstructible<T> :
+        result_ { std::in_place } {}
+
     // Construct a BasicResult from a narrower BasicResult via widening.
 
     template <typename Narrow>

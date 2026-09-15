@@ -104,6 +104,16 @@ concept IsResultValueIfWellFormed = requires {
     std::declval<R>().value_if();
 };
 
+template <typename R, typename E>
+concept IsResultErrorIfWellFormed = requires {
+    std::declval<R>().template error_if<E>();
+};
+
+template <typename R, typename E>
+concept IsResultErrorWellFormed = requires {
+    std::declval<R>().template error<E>();
+};
+
 // Determine whether a non-void BasicResult is copy or move assignable.
 
 template <typename T>
@@ -299,9 +309,9 @@ TEMPLATE_TEST_CASE("varerr_result_constraints_holds_error", "[varerr][result]",
 
 TEMPLATE_TEST_CASE("varerr_result_constraints_value_if", "[varerr][result]",
     (HomResult<void, 0>),
-    (HomResult<void, 1>),
+    (HomResult<void, 3, 1, 2>),
     (HomResult<TrivialType, 0>),
-    (HomResult<TrivialType, 1>)
+    (HomResult<TrivialType, 3, 1, 2>)
 ) {
 
 
@@ -319,9 +329,9 @@ TEMPLATE_TEST_CASE("varerr_result_constraints_value_if", "[varerr][result]",
 
 TEMPLATE_TEST_CASE("varerr_result_constraints_value", "[varerr][result]",
     (HomResult<void, 0>),
-    (HomResult<void, 1>),
+    (HomResult<void, 3, 1, 2>),
     (HomResult<TrivialType, 0>),
-    (HomResult<TrivialType, 1>)
+    (HomResult<TrivialType, 3, 1, 2>)
 ) {
 
     using ResultType = TestType;
@@ -331,6 +341,48 @@ TEMPLATE_TEST_CASE("varerr_result_constraints_value", "[varerr][result]",
         constexpr bool is_void = std::is_void_v<ValueType>;
         constexpr bool is_volatile = std::is_volatile_v<std::remove_reference_t<T>>;
         STATIC_REQUIRE(IsResultValueWellFormed<T> == (!is_void && !is_volatile));
+    });
+
+}
+
+TEMPLATE_TEST_CASE("varerr_result_constraints_error_if", "[varerr][result]",
+    (HomResult<void, 0>),
+    (HomResult<void, 3, 1, 2>),
+    (HomResult<TrivialType, 0>),
+    (HomResult<TrivialType, 3, 1, 2>)
+) {
+
+    using ResultType = TestType;
+    constexpr std::size_t kTestIndexBound = 7;
+
+    iterate_cvref_matrix<ResultType>([]<typename T>(const std::type_identity<T>) -> void {
+        iterate_index_sequence<kTestIndexBound>([]<std::size_t I>(const index_constant<I>) -> void {
+            constexpr bool is_volatile = std::is_volatile_v<std::remove_reference_t<T>>;
+            constexpr bool is_lvalue_ref = std::is_lvalue_reference_v<T>;
+            constexpr bool is_alternative = varerr::IsElemExactInRow<UniverseE, varerr::result_row_t<T>, E<I>>;
+            STATIC_REQUIRE(IsResultErrorIfWellFormed<T, E<I>> == (!is_volatile && is_lvalue_ref && is_alternative));
+        });
+    });
+
+}
+
+TEMPLATE_TEST_CASE("varerr_result_constraints_error", "[varerr][result]",
+    (HomResult<void, 0>),
+    (HomResult<void, 3, 1, 2>),
+    (HomResult<TrivialType, 0>),
+    (HomResult<TrivialType, 3, 1, 2>)
+) {
+
+    using ResultType = TestType;
+    constexpr std::size_t kTestIndexBound = 7;
+
+    iterate_cvref_matrix<ResultType>([]<typename T>(const std::type_identity<T>) -> void {
+        iterate_index_sequence<kTestIndexBound>([]<std::size_t I>(const index_constant<I>) -> void {
+            constexpr bool is_volatile = std::is_volatile_v<std::remove_reference_t<T>>;
+            constexpr bool is_lvalue_ref = std::is_lvalue_reference_v<T>;
+            constexpr bool is_alternative = varerr::IsElemExactInRow<UniverseE, varerr::result_row_t<T>, E<I>>;
+            STATIC_REQUIRE(IsResultErrorWellFormed<T, E<I>> == (!is_volatile && is_lvalue_ref && is_alternative));
+        });
     });
 
 }

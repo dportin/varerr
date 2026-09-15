@@ -326,7 +326,7 @@ struct BasicResult final {
         return this->has_error() && this->status().template holds<E>();
     }
 
-    // Return a pointer to the value or nullptr if the active branch is not ac-
+    // Return a pointer to the value or nullptr if the value branch is not ac-
     // tive. The deduced object parameter must be a non-volatile lvalue.
 
     template <typename Self>
@@ -350,25 +350,41 @@ struct BasicResult final {
              IsNonVolatile<Self>
     // NOLINTNEXTLINE(cppcoreguidelines-missing-std-forward)
     [[nodiscard]] constexpr forward_voidable_argument_t<Self, T> value(this Self&& self) noexcept {
-        assert(self.has_value() && "BasicResult::value: value not active");
+        assert(self.has_value() && "BasicResult::value: value branch not active");
         return std::forward_like<Self>(*self.result_);
     }
 
-    // Error accessors
+    // Return a pointer to error alternative E or nullptr if the error branch is
+    // not active or E is not the active error alternative. The deduced object
+    // parameter must be a non-volatile lvalue.
 
     template <typename E, typename Self>
+    requires IsNonVolatileLValueReference<Self> &&
+             IsElemExactInRow<M, Row<Es...>, E>
     // NOLINTNEXTLINE(cppcoreguidelines-missing-std-forward)
-    [[nodiscard]] constexpr auto&& error(this Self&& self) {
-        static_assert(row_elem_normalized_v<M, E, Row<Es...>>);
-        assert(self.template holds_error<E>());
-        return std::forward_like<Self>(*self.status().template get_if<E>());
+    [[nodiscard]] constexpr transfer_const_t<Self, E>* error_if(this Self&& self) noexcept {
+        if (self.template holds_error<E>()) {
+            return self.status().template get_if<E>();
+        } else {
+            return nullptr;
+        }
     }
 
+    // Return a reference to error alternative E if the error branch is active
+    // and E is the active error alternative. Unlike value() the error alterna-
+    // tives are trivially copyable and thus have trivial move semantics.
+
     template <typename E, typename Self>
-    [[nodiscard]] constexpr transfer_const_t<Self, E>* error_if(this Self& self) noexcept {
-        static_assert(row_elem_normalized_v<M, E, Row<Es...>>);
-        return self.status().template get_if<E>();
+    requires IsNonVolatileLValueReference<Self> &&
+             IsElemExactInRow<M, Row<Es...>, E>
+    // NOLINTNEXTLINE(cppcoreguidelines-missing-std-forward)
+    [[nodiscard]] constexpr transfer_const_t<Self, E>& error(this Self&& self) {
+        auto pointer = self.template error_if<E>();
+        assert(pointer && "BasicResult::error: error branch not active");
+        return *pointer;
     }
+
+    // RESUME REFACTORING HERE
 
     // Return the value unconditionally when the error row is empty.
 

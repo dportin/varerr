@@ -58,6 +58,10 @@ Miscellaneous:
 - Consider testing sparsely-ranked rows in `test_algebra.cpp`.
 - Consider switching between jump table and binary dispatch in `BasicStatus` when number of alternatives is large.
 
+## TODO (Cleanup)
+
+- [P1286R2](https://www.open-std.org/jtc1/sc22/wg21/docs/papers/2019/p1286r2.html) decouples the exception specification of an explicitly defaulted function from its triviality: `~E() noexcept(false) = default` is trivial but potentially throwing; `std::is_trivially_destructible_v<E>` no longer implies `std::is_nothrow_destructible_v<E>`. Since a trivial destructor has no body, the storage guarantees are unaffected and discarding an error cannot throw. However, any trait that tests nothrow destructibility as a proxy for those guarantees might disagree because it asks a narrower question. Revisit whether `IsTriviallyStorable` should additional require `std::is_nothrow_destructible_v`. This would restore the equivalence at the row boundary and reject such (degenerate) alternatives rather than admittin them and (potentially) failing elsewhere.
+
 ## License
 
 This project is licensed under the [MIT](LICENSE) license.

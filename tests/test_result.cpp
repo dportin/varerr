@@ -530,28 +530,116 @@ TEST_CASE("varerr_result_noexcept_emplace_widen", "[varerr][result]") {
     REQUIRE(false);
 }
 
-TEST_CASE("varerr_result_noexcept_has_value", "[varerr][result]") {
-    REQUIRE(false);
+TEMPLATE_TEST_CASE("varerr_result_noexcept_has_value", "[varerr][result]",
+    (InvResult<ThrowAllValueType>),
+    (InvResult<ThrowAllValueType, ThrowAllErrorType>)
+) {
+
+    using ResultType = TestType;
+
+    iterate_cref_matrix<ResultType>([]<typename T>(const std::type_identity<T>) -> void {
+        STATIC_REQUIRE(noexcept(std::declval<T>().has_value()));
+    });
+
 }
 
-TEST_CASE("varerr_result_noexcept_has_error", "[varerr][result]") {
-    REQUIRE(false);
+TEMPLATE_TEST_CASE("varerr_result_noexcept_has_error", "[varerr][result]",
+    (InvResult<ThrowAllValueType>),
+    (InvResult<ThrowAllValueType, ThrowAllErrorType>)
+) {
+
+    using ResultType = TestType;
+
+    iterate_cref_matrix<ResultType>([]<typename T>(const std::type_identity<T>) -> void {
+        STATIC_REQUIRE(noexcept(std::declval<T>().has_error()));
+    });
+
 }
 
-TEST_CASE("varerr_result_noexcept_holds_error", "[varerr][result]") {
-    REQUIRE(false);
+TEMPLATE_TEST_CASE("varerr_result_noexcept_holds_error", "[varerr][result]",
+    (InvResult<ThrowAllValueType, ThrowAllErrorType>)
+) {
+
+    using ResultType = TestType;
+    using ErrorType = varerr::result_alternative_t<ResultType, 0>;
+
+    iterate_cref_matrix<ResultType>([]<typename T>(const std::type_identity<T>) -> void {
+        STATIC_REQUIRE(noexcept(std::declval<T>().template holds_error<ErrorType>()));
+    });
+
 }
 
-TEST_CASE("varerr_result_noexcept_value_if", "[varerr][result]") {
-    REQUIRE(false);
+TEMPLATE_TEST_CASE("varerr_result_noexcept_value_if", "[varerr][result]",
+    (InvResult<ThrowAllValueType>),
+    (InvResult<ThrowAllValueType, ThrowAllErrorType>)
+) {
+
+    using ResultType = TestType;
+
+    iterate_cref_matrix<ResultType>([]<typename T>(const std::type_identity<T>) -> void {
+        constexpr bool is_lvalue_ref = std::is_lvalue_reference_v<T>;
+        if constexpr (is_lvalue_ref) {
+            STATIC_REQUIRE(noexcept(std::declval<T>().value_if()));
+        }
+    });
+
 }
 
-TEST_CASE("varerr_result_noexcept_value", "[varerr][result]") {
-    REQUIRE(false);
+TEMPLATE_TEST_CASE("varerr_result_noexcept_value", "[varerr][result]",
+    (InvResult<ThrowAllValueType>),
+    (InvResult<ThrowAllValueType, ThrowAllErrorType>)
+) {
+
+    using ResultType = TestType;
+
+    iterate_cref_matrix<ResultType>([]<typename T>(const std::type_identity<T>) -> void {
+        STATIC_REQUIRE(noexcept(std::declval<T>().value()));
+    });
+
 }
 
-TEST_CASE("varerr_result_noexcept_take", "[varerr][result]") {
-    REQUIRE(false);
+TEMPLATE_TEST_CASE("varerr_result_noexcept_take", "[varerr][result]",
+    (InvResult<ThrowAllValueType>)
+) {
+
+    using ResultType = TestType;
+
+    iterate_cref_matrix<ResultType>([]<typename T>(const std::type_identity<T>) -> void {
+        STATIC_REQUIRE(noexcept(std::declval<T>().take()));
+    });
+
+}
+
+TEMPLATE_TEST_CASE("varerr_result_noexcept_error_if", "[varerr][result]",
+    (InvResult<ThrowAllValueType, ThrowAllErrorType>)
+) {
+
+    using ResultType = TestType;
+    using ErrorType = varerr::result_alternative_t<ResultType, 0>;
+
+    iterate_cref_matrix<ResultType>([]<typename T>(const std::type_identity<T>) -> void {
+        constexpr bool is_lvalue_ref = std::is_lvalue_reference_v<T>;
+        if constexpr (is_lvalue_ref) {
+            STATIC_REQUIRE(noexcept(std::declval<T>().template error_if<ErrorType>()));
+        }
+    });
+
+}
+
+TEMPLATE_TEST_CASE("varerr_result_noexcept_error", "[varerr][result]",
+    (InvResult<ThrowAllValueType, ThrowAllErrorType>)
+) {
+
+    using ResultType = TestType;
+    using ErrorType = varerr::result_alternative_t<ResultType, 0>;
+
+    iterate_cref_matrix<ResultType>([]<typename T>(const std::type_identity<T>) -> void {
+        constexpr bool is_lvalue_ref = std::is_lvalue_reference_v<T>;
+        if constexpr (is_lvalue_ref) {
+            STATIC_REQUIRE(noexcept(std::declval<T>().template error<ErrorType>()) == is_lvalue_ref);
+        }
+    });
+
 }
 
 TEST_CASE("varerr_result_functional_emplace", "[varerr][result]") {

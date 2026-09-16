@@ -145,6 +145,7 @@ struct result_impl_traits<BasicResult<M, T, Es...>> {
     using UniverseType = M;
     using ValueType = T;
     using RowType = Row<Es...>;
+    using StatusType = status_from_row_t<UniverseType, RowType>;
 
 };
 
@@ -176,6 +177,12 @@ using result_value_t = result_impl_traits<std::remove_cvref_t<X>>::ValueType;
 
 template <IsResult X>
 using result_row_t = result_impl_traits<std::remove_cvref_t<X>>::RowType;
+
+template <IsResult X>
+using result_status_t = result_impl_traits<std::remove_cvref_t<X>>::StatusType;
+
+template <IsResult X, std::size_t I>
+using result_alternative_t = status_alternative_t<result_status_t<X>, I>;
 
 // IWYU 0.26 (Clang 22.1.8) segfaults when a type alias declaration names a mem-
 // ber template of a dependent type (although Clang accepts the same code). The
@@ -278,7 +285,7 @@ struct BasicResult final {
 
     template <typename E, typename... Args>
     requires IsElemExactInRow<M, Row<Es...>, E> &&
-             std::constructible_from<E, Args...>
+             std::is_constructible_v<E, Args...>
     explicit constexpr BasicResult(std::in_place_type_t<E>, Args&&... args)
     noexcept(std::is_nothrow_constructible_v<E, Args...>) :
         result_ { std::unexpect, ErrorType { std::in_place_type<E>, std::forward<Args>(args)... } } {}
@@ -385,8 +392,10 @@ struct BasicResult final {
     }
 
     // Return a reference to error alternative E if the error branch is active
-    // and E is the active error alternative. Unlike value() the error alterna-
-    // tives are trivially copyable and thus have trivial move semantics.
+    // and E is the active error alternative. The implicit object parameter is
+    // constrained to non-volatile lvalue references because error() delegates
+    // to BasicStatus::get_if(). The BasicStatus accessors are constrained to
+    // lvalues to prevent dangling references and pointers.
 
     template <typename E, typename Self>
     requires IsNonVolatileLValueReference<Self> &&

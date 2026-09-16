@@ -410,6 +410,161 @@ struct NoDefaultConstructType {
 static_assert(std::is_trivially_copyable_v<NoDefaultConstructType>);
 static_assert(!std::is_default_constructible_v<NoDefaultConstructType>);
 
+// Constructible but not nothrow constructible.
+
+struct ThrowConstructType {
+    int value_;
+    ThrowConstructType() noexcept = default;
+    ThrowConstructType(int) noexcept(false) {}
+    ~ThrowConstructType() noexcept = default;
+    ThrowConstructType(const ThrowConstructType&) noexcept = default;
+    ThrowConstructType(ThrowConstructType&&) noexcept = default;
+    ThrowConstructType& operator=(const ThrowConstructType&) noexcept = default;
+    ThrowConstructType& operator=(ThrowConstructType&&) noexcept = default;
+};
+
+static_assert(std::is_constructible_v<ThrowConstructType, int>);
+static_assert(!std::is_nothrow_constructible_v<ThrowConstructType, int>);
+
+// Default constructible but not nothrow default constructible.
+
+struct ThrowDefaultConstructType {
+    int value_;
+    ThrowDefaultConstructType() noexcept(false) {}
+    ~ThrowDefaultConstructType() noexcept = default;
+    ThrowDefaultConstructType(const ThrowDefaultConstructType&) noexcept = default;
+    ThrowDefaultConstructType(ThrowDefaultConstructType&&) noexcept = default;
+    ThrowDefaultConstructType& operator=(const ThrowDefaultConstructType&) noexcept = default;
+    ThrowDefaultConstructType& operator=(ThrowDefaultConstructType&&) noexcept = default;
+};
+
+static_assert(std::is_default_constructible_v<ThrowDefaultConstructType>);
+static_assert(!std::is_nothrow_default_constructible_v<ThrowDefaultConstructType>);
+
+// Value type with maximal exception surface.
+
+struct ThrowAllValueType {
+    int value_;
+    ThrowAllValueType() noexcept(false) {}
+    ~ThrowAllValueType() noexcept(false) {}
+    ThrowAllValueType(int) noexcept(false) {}
+    ThrowAllValueType(const ThrowAllValueType&) noexcept(false) {}
+    ThrowAllValueType(ThrowAllValueType&&) noexcept(false) {}
+    ThrowAllValueType& operator=(const ThrowAllValueType&) noexcept(false) { return *this; } // NOLINT
+    ThrowAllValueType& operator=(ThrowAllValueType&&) noexcept(false) { return *this; }
+};
+
+static_assert(!std::is_nothrow_destructible_v<ThrowAllValueType>);
+static_assert(!std::is_nothrow_constructible_v<ThrowAllValueType, int>);
+static_assert(!std::is_nothrow_default_constructible_v<ThrowAllValueType>);
+static_assert(!std::is_nothrow_copy_constructible_v<ThrowAllValueType>);
+static_assert(!std::is_nothrow_move_constructible_v<ThrowAllValueType>);
+static_assert(!std::is_nothrow_copy_assignable_v<ThrowAllValueType>);
+static_assert(!std::is_nothrow_move_assignable_v<ThrowAllValueType>);
+
+// Error type with maximal exception surface (modulo P1286R2).
+
+struct ThrowAllErrorType {
+    int value_;
+    ThrowAllErrorType() noexcept(false) = default;
+    ~ThrowAllErrorType() noexcept = default;
+    ThrowAllErrorType(int) noexcept(false) {}
+    ThrowAllErrorType(const ThrowAllErrorType&) noexcept = default;
+    ThrowAllErrorType(ThrowAllErrorType&&) noexcept = default;
+    ThrowAllErrorType& operator=(const ThrowAllErrorType&) noexcept(false) = default;
+    ThrowAllErrorType& operator=(ThrowAllErrorType&&) noexcept(false) = default;
+};
+
+static_assert(std::is_trivial_v<ThrowAllErrorType>);
+static_assert(std::is_trivially_copyable_v<ThrowAllErrorType>);
+static_assert(std::is_trivially_destructible_v<ThrowAllErrorType>);
+static_assert(std::is_trivially_copy_constructible_v<ThrowAllErrorType>);
+static_assert(std::is_trivially_move_constructible_v<ThrowAllErrorType>);
+
+static_assert(std::is_nothrow_destructible_v<ThrowAllErrorType>);
+static_assert(std::is_nothrow_copy_constructible_v<ThrowAllErrorType>);
+static_assert(std::is_nothrow_move_constructible_v<ThrowAllErrorType>);
+
+static_assert(!std::is_nothrow_constructible_v<ThrowAllErrorType, int>);
+static_assert(!std::is_nothrow_default_constructible_v<ThrowAllErrorType>);
+static_assert(!std::is_nothrow_copy_assignable_v<ThrowAllErrorType>);
+static_assert(!std::is_nothrow_move_assignable_v<ThrowAllErrorType>);
+
+// Destructible but not nothrow destructible.
+
+struct ThrowDestructType {
+    int value_;
+    ThrowDestructType() noexcept = default;
+    ~ThrowDestructType() noexcept(false) {}
+    ThrowDestructType(const ThrowDestructType&) noexcept = default;
+    ThrowDestructType(ThrowDestructType&&) noexcept = default;
+    ThrowDestructType& operator=(const ThrowDestructType&) noexcept = default;
+    ThrowDestructType& operator=(ThrowDestructType&&) noexcept = default;
+};
+
+static_assert(std::is_destructible_v<ThrowDestructType>);
+static_assert(!std::is_nothrow_destructible_v<ThrowDestructType>);
+
+// Copy constructible but not nothrow copy constructible.
+
+struct ThrowCopyConstructType {
+    int value_;
+    ThrowCopyConstructType() noexcept = default;
+    ~ThrowCopyConstructType() noexcept = default;
+    ThrowCopyConstructType(const ThrowCopyConstructType&) noexcept(false) {}
+    ThrowCopyConstructType(ThrowCopyConstructType&&) noexcept = default;
+    ThrowCopyConstructType& operator=(const ThrowCopyConstructType&) noexcept = default;
+    ThrowCopyConstructType& operator=(ThrowCopyConstructType&&) noexcept = default;
+};
+
+static_assert(std::is_copy_constructible_v<ThrowCopyConstructType>);
+static_assert(!std::is_nothrow_copy_constructible_v<ThrowCopyConstructType>);
+
+// Move constructible but not nothrow move constructible.
+
+struct ThrowMoveConstructType {
+    int value_;
+    ThrowMoveConstructType() noexcept = default;
+    ~ThrowMoveConstructType() noexcept = default;
+    ThrowMoveConstructType(const ThrowMoveConstructType&) noexcept = default;
+    ThrowMoveConstructType(ThrowMoveConstructType&&) noexcept(false) {} // NOLINT
+    ThrowMoveConstructType& operator=(const ThrowMoveConstructType&) noexcept = default;
+    ThrowMoveConstructType& operator=(ThrowMoveConstructType&&) noexcept = default;
+};
+
+static_assert(std::is_move_constructible_v<ThrowMoveConstructType>);
+static_assert(!std::is_nothrow_move_constructible_v<ThrowMoveConstructType>);
+
+// Copy assignable but not nothrow copy assignable.
+
+struct ThrowCopyAssignType {
+    int value_;
+    ThrowCopyAssignType() noexcept = default;
+    ~ThrowCopyAssignType() noexcept = default;
+    ThrowCopyAssignType(const ThrowCopyAssignType&) noexcept = default;
+    ThrowCopyAssignType(ThrowCopyAssignType&&) noexcept = default;
+    ThrowCopyAssignType& operator=(const ThrowCopyAssignType&) noexcept(false) { return *this; } // NOLINT
+    ThrowCopyAssignType& operator=(ThrowCopyAssignType&&) noexcept = default;
+};
+
+static_assert(std::is_copy_assignable_v<ThrowCopyAssignType>);
+static_assert(!std::is_nothrow_copy_assignable_v<ThrowCopyAssignType>);
+
+// Move assignable but not nothrow move assignable.
+
+struct ThrowMoveAssignType {
+    int value_;
+    ThrowMoveAssignType() noexcept = default;
+    ~ThrowMoveAssignType() noexcept = default;
+    ThrowMoveAssignType(const ThrowMoveAssignType&) noexcept = default;
+    ThrowMoveAssignType(ThrowMoveAssignType&&) noexcept = default;
+    ThrowMoveAssignType& operator=(const ThrowMoveAssignType&) noexcept = default;
+    ThrowMoveAssignType& operator=(ThrowMoveAssignType&&) noexcept(false) { return *this; }
+};
+
+static_assert(std::is_move_assignable_v<ThrowMoveAssignType>);
+static_assert(!std::is_nothrow_move_assignable_v<ThrowMoveAssignType>);
+
 // Trivially copyable but non-standard layout.
 
 struct NonStandardLayoutType {

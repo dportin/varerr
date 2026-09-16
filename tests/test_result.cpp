@@ -71,7 +71,17 @@ static_assert(std::same_as<HetResult<int, 0, 3>, varerr::Result<UniverseH, int>>
 static_assert(std::same_as<HetResult<int, 1, 3>, varerr::Result<UniverseH, int, H<0, 3>>>);
 static_assert(std::same_as<HetResult<int, 2, 3>, varerr::Result<UniverseH, int, H<0, 3>, H<1, 3>>>);
 
-// Determine whether BasicResult constructors and member functions are well-formed.
+// Lift the invariant-breaking test universe to BasicResult.
+
+template <typename T, typename... Es>
+using InvResult = pack_apply_t<
+    bind_front_adapter<varerr::BasicResult, pack_apply_t<bind_adapter<UniverseT>, varerr::Row<Es...>>, T>,
+    varerr::Row<Es...>
+>;
+
+static_assert(std::same_as<InvResult<int>, varerr::Result<UniverseT<>, int>>);
+static_assert(std::same_as<InvResult<int, short>, varerr::Result<UniverseT<short>, int, short>>);
+static_assert(std::same_as<InvResult<int, short, E<0>>, varerr::Result<UniverseT<short, E<0>>, int, short, E<0>>>);
 
 template <typename R>
 concept IsResultHasValueWellFormed = requires {
@@ -272,7 +282,7 @@ TEMPLATE_TEST_CASE("varerr_result_constraints_has_value", "[varerr][result]",
 
 }
 
-TEMPLATE_TEST_CASE("varerr_result_contraints_has_error", "[varerr][result]",
+TEMPLATE_TEST_CASE("varerr_result_constraints_has_error", "[varerr][result]",
     (HomResult<void, 0>),
     (HomResult<void, 3, 1, 2>),
     (HomResult<TrivialType, 0>),
@@ -411,6 +421,103 @@ TEMPLATE_TEST_CASE("varerr_result_constraints_error", "[varerr][result]",
 
 }
 
+TEST_CASE("varerr_result_return_has_value", "[varerr][result]") {
+    REQUIRE(false); /* trivial */
+}
+
+TEST_CASE("varerr_result_return_has_error", "[varerr][result]") {
+    REQUIRE(false); /* trivial */
+}
+
+TEST_CASE("varerr_result_return_holds_error", "[varerr][result]") {
+    REQUIRE(false); /* trivial */
+}
+
+TEST_CASE("varerr_result_return_value_if", "[varerr][result]") {
+
+    using ValueType = TrivialType;
+    using ResultType = HomResult<ValueType, 1>;
+
+    iterate_cref_matrix<ResultType>([]<typename T>(const std::type_identity<T>) -> void {
+        constexpr bool is_lvalue_ref = std::is_lvalue_reference_v<T>;
+        constexpr bool is_const = std::is_const_v<std::remove_reference_t<T>>;
+        if constexpr (is_lvalue_ref) {
+            using ExpectedType = std::conditional_t<is_const, const ValueType*, ValueType*>;
+            using ReturnType = decltype(std::declval<T>().value_if());
+            STATIC_REQUIRE(std::same_as<ReturnType, ExpectedType>);
+        }
+    });
+
+}
+
+TEST_CASE("varerr_result_return_value", "[varerr][result]") {
+
+    using ValueType = TrivialType;
+    using ResultType = HomResult<ValueType, 1>;
+
+    iterate_cref_matrix<ResultType>([]<typename T>(const std::type_identity<T>) -> void {
+        constexpr bool is_lvalue_ref = std::is_lvalue_reference_v<T>;
+        constexpr bool is_const = std::is_const_v<std::remove_reference_t<T>>;
+        using ExpectedBaseType = std::conditional_t<is_const, const ValueType, ValueType>;
+        using ExpectedType = std::conditional_t<is_lvalue_ref, ExpectedBaseType&, ExpectedBaseType&&>;
+        using ReturnType = decltype(std::declval<T>().value());
+        STATIC_REQUIRE(std::same_as<ReturnType, ExpectedType>);
+    });
+
+}
+
+TEST_CASE("varerr_result_return_take", "[varerr][result]") {
+
+    using ValueType = TrivialType;
+    using ResultType = HomResult<ValueType, 0>;
+
+    iterate_cref_matrix<ResultType>([]<typename T>(const std::type_identity<T>) -> void {
+        constexpr bool is_lvalue_ref = std::is_lvalue_reference_v<T>;
+        constexpr bool is_const = std::is_const_v<std::remove_reference_t<T>>;
+        using ExpectedBaseType = std::conditional_t<is_const, const ValueType, ValueType>;
+        using ExpectedType = std::conditional_t<is_lvalue_ref, ExpectedBaseType&, ExpectedBaseType&&>;
+        using ReturnType = decltype(std::declval<T>().take());
+        STATIC_REQUIRE(std::same_as<ReturnType, ExpectedType>);
+    });
+
+}
+
+TEST_CASE("varerr_result_return_error_if", "[varerr][result]") {
+
+    using ErrorType = E<0>;
+    using ValueType = TrivialType;
+    using ResultType = HomResult<ValueType, 1>;
+
+    iterate_cref_matrix<ResultType>([]<typename T>(const std::type_identity<T>) -> void {
+        constexpr bool is_lvalue_ref = std::is_lvalue_reference_v<T>;
+        constexpr bool is_const = std::is_const_v<std::remove_reference_t<T>>;
+        if constexpr (is_lvalue_ref) {
+            using ExpectedType = std::conditional_t<is_const, const ErrorType*, ErrorType*>;
+            using ReturnType = decltype(std::declval<T>().template error_if<ErrorType>());
+            STATIC_REQUIRE(std::same_as<ReturnType, ExpectedType>);
+        }
+    });
+
+}
+
+TEST_CASE("varerr_result_return_error", "[varerr][result]") {
+
+    using ErrorType = E<0>;
+    using ValueType = TrivialType;
+    using ResultType = HomResult<ValueType, 1>;
+
+    iterate_cref_matrix<ResultType>([]<typename T>(const std::type_identity<T>) -> void {
+        constexpr bool is_lvalue_ref = std::is_lvalue_reference_v<T>;
+        constexpr bool is_const = std::is_const_v<std::remove_reference_t<T>>;
+        if constexpr (is_lvalue_ref) {
+            using ExpectedType = std::conditional_t<is_const, const ErrorType&, ErrorType&>;
+            using ReturnType = decltype(std::declval<T>().template error<ErrorType>());
+            STATIC_REQUIRE(std::same_as<ReturnType, ExpectedType>);
+        }
+    });
+
+}
+
 TEST_CASE("varerr_result_noexcept_emplace_value", "[varerr][result]") {
     REQUIRE(false);
 }
@@ -444,14 +551,6 @@ TEST_CASE("varerr_result_noexcept_value", "[varerr][result]") {
 }
 
 TEST_CASE("varerr_result_noexcept_take", "[varerr][result]") {
-    REQUIRE(false);
-}
-
-TEST_CASE("varerr_result_return_value_if", "[varerr][result]") {
-    REQUIRE(false);
-}
-
-TEST_CASE("varerr_result_return_value", "[varerr][result]") {
     REQUIRE(false);
 }
 

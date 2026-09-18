@@ -3,7 +3,7 @@
 #include <catch2/catch_template_test_macros.hpp>
 
 #include "include/utilities.hpp"
-#include "include/lifetime.hpp"
+// #include "include/lifetime.hpp"
 #include "include/universe.hpp"
 
 #include <varerr/utilities.hpp>
@@ -14,7 +14,6 @@
 
 #include <concepts>
 #include <cstddef>
-#include <expected>
 #include <type_traits>
 #include <utility>
 
@@ -88,12 +87,6 @@ concept IsResultHasValueWellFormed = requires {
     std::declval<R>().has_value();
 };
 
-// template <typename R>
-// concept IsResultBoolWellFormed = std::constructible_from<bool, R>;
-
-// template <typename R>
-// concept IsResultImplicitBoolWellFormed = std::convertible_to<R, bool>;
-
 template <typename R>
 concept IsResultHasErrorWellFormed = requires {
     std::declval<R>().has_error();
@@ -153,7 +146,32 @@ inline constexpr bool is_trivially_move_assignable_depends_v =
     std::is_trivially_move_assignable_v<T> &&
     std::is_trivially_move_constructible_v<T>;
 
+// Aliases for testing widening constructor.
+
+template <typename T>
+using ResultVarEmptyType = HomResult<T, 0>;
+
+template <typename T>
+using ResultVarSubType = HomResult<T, 3, 3, 2>;
+
+template <typename T>
+using ResultVarSuperType = HomResult<T, 5, 1, 2>;
+
+template <typename T>
+using ResultVarLeftType = HomResult<T, 3, 1, 2>;
+
+template <typename T>
+using ResultVarRightType = HomResult<T, 3, 5, 2>;
+
+static_assert(std::same_as<ResultVarEmptyType<int>, varerr::BasicResult<UniverseE, int>>);
+static_assert(std::same_as<ResultVarSubType<int>, varerr::BasicResult<UniverseE, int, E<3>, E<5>, E<7>>>);
+static_assert(std::same_as<ResultVarSuperType<int>, varerr::BasicResult<UniverseE, int, E<1>, E<3>, E<5>, E<7>, E<9>>>);
+static_assert(std::same_as<ResultVarLeftType<int>, varerr::BasicResult<UniverseE, int, E<1>, E<3>, E<5>>>);
+static_assert(std::same_as<ResultVarRightType<int>, varerr::BasicResult<UniverseE, int, E<5>, E<7>, E<9>>>);
+
 } // namespace
+
+// Triviality tests
 
 TEMPLATE_TEST_CASE("varerr_result_trivial", "[varerr][result]",
     (HomResult<TrivialType, 0>),
@@ -234,36 +252,520 @@ TEMPLATE_TEST_CASE("varerr_result_trivial_void", "[varerr][result]",
 
 }
 
+// Constructibility tests
+
 TEST_CASE("varerr_result_construct_empty", "[varerr][result]") {
-    REQUIRE(false);
+
+    using ResultEmptyType = HomResult<TrivialType, 0>;
+    using ResultEmptyVoidType = HomResult<void, 0>;
+
+    // An empty BasicResult has no in-place error constructor.
+
+    STATIC_REQUIRE_FALSE(std::is_constructible_v<ResultEmptyType, std::in_place_type_t<E<0>>, std::size_t>);
+    STATIC_REQUIRE_FALSE(std::is_constructible_v<ResultEmptyVoidType, std::in_place_type_t<E<0>>, std::size_t>);
+
+    // An empty BasicResult holds a value.
+
+    constexpr ResultEmptyType result_empty_value { std::in_place, 42 };
+
+    STATIC_REQUIRE(result_empty_value.has_value());
+    STATIC_REQUIRE(result_empty_value.value().value_ == 42);
+    STATIC_REQUIRE_FALSE(result_empty_value.has_error());
+
+    constexpr ResultEmptyVoidType result_void { std::in_place };
+
+    STATIC_REQUIRE(result_void.has_value());
+    STATIC_REQUIRE_FALSE(result_void.has_error());
+
 }
 
 TEST_CASE("varerr_result_construct_default", "[varerr][result]") {
-    REQUIRE(false);
+
+    using ResultDefType = HomResult<TrivialType, 1>;
+    using ResultDefVoidType = HomResult<void, 1>;
+    using ResultDefThrowType = HomResult<ThrowDefaultConstructType, 1>;
+    using ResultNotDefType = HomResult<NoDefaultConstructType, 1>;
+
+    // The default constructor inherits default constructibility from the value
+    // type.
+
+    STATIC_REQUIRE(std::is_default_constructible_v<ResultDefType>);
+    STATIC_REQUIRE(std::is_default_constructible_v<ResultDefVoidType>);
+    STATIC_REQUIRE(std::is_default_constructible_v<ResultDefThrowType>);
+    STATIC_REQUIRE_FALSE(std::is_default_constructible_v<ResultNotDefType>);
+
+    // The default constructor value-initializes the value.
+
+    constexpr ResultDefType result_def {};
+
+    STATIC_REQUIRE(result_def.has_value());
+    STATIC_REQUIRE(result_def.value().value_ == 0);
+    STATIC_REQUIRE_FALSE(result_def.has_error());
+
+    constexpr ResultDefVoidType result_def_void {};
+
+    STATIC_REQUIRE(result_def_void.has_value());
+    STATIC_REQUIRE_FALSE(result_def_void.has_error());
+
+    constexpr ResultDefThrowType result_def_throw {};
+
+    STATIC_REQUIRE(result_def_throw.has_value());
+    STATIC_REQUIRE(result_def_throw.value().value_ == 0);
+    STATIC_REQUIRE_FALSE(result_def_throw.has_error());
+
 }
 
 TEST_CASE("varerr_result_construct_emplace_value", "[varerr][result]") {
-    REQUIRE(false);
+
+    using ValueUnaryType = TrivialType;
+    using ValueBinaryType = std::pair<int, int>;
+
+    using ResultUnaryType = HomResult<ValueUnaryType, 1>;
+    using ResultBinaryType = HomResult<ValueBinaryType, 1>;
+
+    // The in-place value constructor inherits constructibility from the value
+    // type.
+
+    STATIC_REQUIRE(std::is_constructible_v<ResultUnaryType, std::in_place_t, int>);
+    STATIC_REQUIRE(std::is_constructible_v<ResultBinaryType, std::in_place_t, int, int>);
+
+    // The in-place value constructor constructs the value branch.
+
+    constexpr ResultUnaryType result_unary { std::in_place, 42 };
+
+    STATIC_REQUIRE(result_unary.has_value());
+    STATIC_REQUIRE(result_unary.value().value_ == 42);
+    STATIC_REQUIRE_FALSE(result_unary.has_error());
+
+    constexpr ResultBinaryType result_binary { std::in_place, 42, 43 };
+
+    STATIC_REQUIRE(result_binary.has_value());
+    STATIC_REQUIRE(result_binary.value().first == 42);
+    STATIC_REQUIRE(result_binary.value().second == 43);
+    STATIC_REQUIRE_FALSE(result_binary.has_error());
+
+    // The in-place value constructor value-initializes the value when no argum-
+    // ents are supplied.
+
+    constexpr ResultUnaryType result_unary_noargs { std::in_place };
+
+    STATIC_REQUIRE(result_unary_noargs.has_value());
+    STATIC_REQUIRE(result_unary_noargs.value().value_ == 0);
+    STATIC_REQUIRE_FALSE(result_unary_noargs.has_error());
+
+    constexpr ResultBinaryType result_binary_noargs { std::in_place };
+
+    STATIC_REQUIRE(result_binary_noargs.has_value());
+    STATIC_REQUIRE(result_binary_noargs.value().first == 0);
+    STATIC_REQUIRE(result_binary_noargs.value().second == 0);
+    STATIC_REQUIRE_FALSE(result_binary_noargs.has_error());
+
+}
+
+TEST_CASE("varerr_result_construct_emplace_value_forward", "[varerr][result]") {
+
+    using ValueForwardType = ForwardProbeType;
+    using ResultForwardType = HomResult<ValueForwardType, 1>;
+
+    // The in-place value constructor forwards its arguments.
+
+    STATIC_REQUIRE([]() -> std::pair<ForwardCategory, ForwardCategory> {
+        int fst = 42; const int snd = 43;
+        ResultForwardType result { std::in_place, fst, std::move(snd) }; // NOLINT
+        return { result.value().fst_, result.value().snd_ };
+    }() == std::pair { ForwardCategory::LValue, ForwardCategory::ConstRValue });
+
+    STATIC_REQUIRE([]() -> std::pair<ForwardCategory, ForwardCategory> {
+        int fst = 42; const int snd = 43;
+        ResultForwardType result { std::in_place, std::move(fst), snd }; // NOLINT
+        return { result.value().fst_, result.value().snd_ };
+    }() == std::pair { ForwardCategory::RValue, ForwardCategory::ConstLValue });
+
 }
 
 TEST_CASE("varerr_result_construct_emplace_error", "[varerr][result]") {
-    REQUIRE(false);
+
+    constexpr std::size_t kTestIndexBound = 7;
+
+    using ResultType = HomResult<TrivialType, 3, 1, 2>;
+    using RowType = varerr::result_row_t<ResultType>;
+    using UniverseType = varerr::result_universe_t<ResultType>;
+
+    // The in-place error constructor inherits constructibility from the error
+    // alternative.
+
+    iterate_index_sequence<kTestIndexBound>([]<std::size_t I>(const index_constant<I>) -> void {
+        constexpr bool is_alternative = varerr::IsElemExactInRow<UniverseType, RowType, E<I>>;
+        STATIC_REQUIRE(std::is_constructible_v<ResultType, std::in_place_type_t<E<I>>, std::size_t> == is_alternative);
+    });
+
+    // The in-place error constructor constructs the error alternative by type
+    // in the error branch.
+
+    iterate_index_array<1, 3, 5>([]<std::size_t I>(const index_constant<I>) -> void {
+        constexpr ResultType result { std::in_place_type<E<I>>, std::size_t {I + 42} };
+        STATIC_REQUIRE(result.has_error());
+        STATIC_REQUIRE(result.holds_error<E<I>>());
+        STATIC_REQUIRE(result.error<E<I>>().value() == I + 42);
+        STATIC_REQUIRE_FALSE(result.has_value());
+    });
+
+    // The in-place error constructor value-initializes the error alternative
+    // when no arguments are supplied.
+
+    iterate_index_array<1, 3, 5>([]<std::size_t I>(const index_constant<I>) -> void {
+        constexpr ResultType result { std::in_place_type<E<I>> };
+        STATIC_REQUIRE(result.has_error());
+        STATIC_REQUIRE(result.holds_error<E<I>>());
+        STATIC_REQUIRE(result.error<E<I>>().value() == 0);
+        STATIC_REQUIRE_FALSE(result.has_value());
+    });
+
+}
+
+TEST_CASE("varerr_result_construct_emplace_error_forward", "[varerr][result]") {
+
+    using ResultForwardType = InvResult<TrivialType, E<0>, ForwardProbeType, E<1>>;
+
+    // The in-place error constructor forwards its arguments.
+
+    STATIC_REQUIRE([]() -> std::pair<ForwardCategory, ForwardCategory> {
+        int fst = 42; const int snd = 43;
+        ResultForwardType result { std::in_place_type<ForwardProbeType>, fst, std::move(snd) }; // NOLINT
+        return { result.error<ForwardProbeType>().fst_, result.error<ForwardProbeType>().snd_ };
+    }() == std::pair { ForwardCategory::LValue, ForwardCategory::ConstRValue });
+
+    STATIC_REQUIRE([]() -> std::pair<ForwardCategory, ForwardCategory> {
+        int fst = 42; const int snd = 43;
+        ResultForwardType result { std::in_place_type<ForwardProbeType>, std::move(fst), snd }; // NOLINT
+        return { result.error<ForwardProbeType>().fst_, result.error<ForwardProbeType>().snd_ };
+    }() == std::pair { ForwardCategory::RValue, ForwardCategory::ConstLValue });
+
 }
 
 TEST_CASE("varerr_result_construct_widen", "[varerr][result]") {
-    REQUIRE(false);
+
+    using RowEmpty = varerr::Row<>;
+    using RowBase = varerr::Row<E<1>, E<3>>;
+    using RowPrefixed = varerr::Row<E<1>, E<3>, E<5>>;
+    using RowUnPrefixed = varerr::Row<E<0>, E<1>, E<2>, E<3>, E<4>>;
+
+    using ResultEmpty = varerr::result_from_row_t<UniverseE, TrivialType, RowEmpty>;
+    using ResultBase = varerr::result_from_row_t<UniverseE, TrivialType, RowBase>;
+    using ResultPrefixed = varerr::result_from_row_t<UniverseE, TrivialType, RowPrefixed>;
+    using ResultUnPrefixed = varerr::result_from_row_t<UniverseE, TrivialType, RowUnPrefixed>;
+
+    // Widening propagates the active value.
+
+    constexpr ResultEmpty result_value_empty { std::in_place, std::size_t {42} };
+    constexpr ResultBase result_value_base { result_value_empty };
+    constexpr ResultPrefixed result_value_prefixed { result_value_base };
+    constexpr ResultUnPrefixed result_value_unprefixed { result_value_base };
+
+    STATIC_REQUIRE(result_value_base.has_value());
+    STATIC_REQUIRE(result_value_prefixed.has_value());
+    STATIC_REQUIRE(result_value_unprefixed.has_value());
+
+    STATIC_REQUIRE(result_value_base.value().value_ == 42);
+    STATIC_REQUIRE(result_value_prefixed.value().value_ == 42);
+    STATIC_REQUIRE(result_value_unprefixed.value().value_ == 42);
+
+    // The active error alternative is not reindexed when the error rows share a
+    // prefix but the BasicResult interface cannot validate this.
+
+    iterate_index_array<1, 3>([]<std::size_t I>(const index_constant<I>) -> void {
+
+        constexpr ResultBase result_base { std::in_place_type<E<I>>, std::size_t {I + 42} };
+        constexpr ResultPrefixed result_prefixed { result_base };
+
+        STATIC_REQUIRE(result_prefixed.has_error());
+        STATIC_REQUIRE(result_prefixed.holds_error<E<I>>());
+        STATIC_REQUIRE(result_prefixed.error<E<I>>().value() == I + 42);
+
+    });
+
+    // The active error alternative is reindexed when the error rows do not
+    // share a prefix but the BasicResult interface cannot validate this.
+
+    iterate_index_array<1, 3>([]<std::size_t I>(const index_constant<I>) -> void {
+
+        constexpr ResultBase result_base { std::in_place_type<E<I>>, std::size_t {I + 42} };
+        constexpr ResultUnPrefixed result_unprefixed { result_base };
+
+        STATIC_REQUIRE(result_unprefixed.has_error());
+        STATIC_REQUIRE(result_unprefixed.holds_error<E<I>>());
+        STATIC_REQUIRE(result_unprefixed.error<E<I>>().value() == I + 42 );
+
+    });
+
 }
 
-TEST_CASE("varerr_result_constraints_emplace_value", "[varerr][result]") {
-    REQUIRE(false);
+// Constraints tests
+
+TEMPLATE_TEST_CASE("varerr_result_constraints_default", "[varerr][result]",
+    TrivialType,
+    NoDefaultConstructType,
+    NoCopyConstructType,
+    NoMoveConstructType,
+    NoCopyAssignType,
+    NoMoveAssignType
+) {
+
+    using ValueType = TestType;
+    using RowType = varerr::Row<NoDefaultConstructType, ThrowAllErrorType>;
+    using UniverseType = pack_apply_t<bind_adapter<UniverseT>, RowType>;
+    using ResultType = varerr::result_from_row_t<UniverseType, ValueType, RowType>;
+
+    // The default constructor inherits default constructibility from the value
+    // type.
+
+    constexpr bool is_constructible = std::is_default_constructible_v<ValueType>;
+    STATIC_REQUIRE(std::is_default_constructible_v<ResultType> == is_constructible);
+
 }
 
-TEST_CASE("varerr_result_constraints_emplace_error", "[varerr][result]") {
-    REQUIRE(false);
+TEMPLATE_TEST_CASE("varerr_result_constraints_emplace_value", "[varerr][result]",
+    TrivialType,
+    NoDefaultConstructType,
+    NoCopyConstructType,
+    NoMoveConstructType,
+    NoCopyAssignType,
+    NoMoveAssignType
+) {
+
+    using ValueType = TestType;
+    using RowType = varerr::Row<NoDefaultConstructType, ThrowAllErrorType>;
+    using UniverseType = pack_apply_t<bind_adapter<UniverseT>, RowType>;
+    using ResultType = varerr::result_from_row_t<UniverseType, ValueType, RowType>;
+
+    constexpr bool is_constructible = std::is_constructible_v<ValueType, int>;
+    constexpr bool is_copy_constructible = std::is_copy_constructible_v<ValueType>;
+    constexpr bool is_move_constructible = std::is_move_constructible_v<ValueType>;
+    constexpr bool is_default_constructible = std::is_default_constructible_v<ValueType>;
+
+    // The in-place value constructor is explicit.
+
+    STATIC_REQUIRE_FALSE(std::is_convertible_v<std::in_place_t, ResultType>);
+    STATIC_REQUIRE(std::is_constructible_v<ResultType, std::in_place_t> == is_default_constructible);
+
+    // The in-place value constructor inherits constructibility from the value
+    // type.
+
+    STATIC_REQUIRE(std::is_constructible_v<ResultType, std::in_place_t, int> == is_constructible);
+    STATIC_REQUIRE(std::is_constructible_v<ResultType, std::in_place_t, ValueType&> == is_copy_constructible);
+    STATIC_REQUIRE(std::is_constructible_v<ResultType, std::in_place_t, ValueType&&> == is_move_constructible);
+    STATIC_REQUIRE(std::is_constructible_v<ResultType, std::in_place_t, const ValueType&> == is_copy_constructible);
+    STATIC_REQUIRE(std::is_constructible_v<ResultType, std::in_place_t, const ValueType&&> == is_copy_constructible);
+
+}
+
+TEST_CASE("varerr_result_constraints_emplace_value_types", "[varerr][result]") {
+
+    using RowType = varerr::Row<NoDefaultConstructType, ThrowAllErrorType>;
+    using UniverseType = pack_apply_t<bind_adapter<UniverseT>, RowType>;
+    using ResultVoid = varerr::result_from_row_t<UniverseType, void, RowType>;
+    using ResultTrivial = varerr::result_from_row_t<UniverseType, TrivialType, RowType>;
+
+    // A void value is only in-place constructible when no arguments are given.
+
+    STATIC_REQUIRE(std::is_constructible_v<ResultVoid, std::in_place_t>);
+    STATIC_REQUIRE_FALSE(std::is_constructible_v<ResultVoid, std::in_place_t, int>);
+
+    // The value type must be in-place constructible from the arguments.
+
+    STATIC_REQUIRE(std::is_constructible_v<ResultTrivial, std::in_place_t, int>);
+    STATIC_REQUIRE(std::is_constructible_v<ResultTrivial, std::in_place_t, TrivialType>);
+
+    iterate_type_pack<int, TrivialType>([]<typename T>(const std::type_identity<T>) -> void {
+        STATIC_REQUIRE_FALSE(std::is_constructible_v<ResultTrivial, std::in_place_t, T*>);
+        STATIC_REQUIRE_FALSE(std::is_constructible_v<ResultTrivial, std::in_place_t, T, T>);
+        STATIC_REQUIRE_FALSE(std::is_constructible_v<ResultTrivial, std::in_place_t, T(*)()>);
+        STATIC_REQUIRE_FALSE(std::is_constructible_v<ResultTrivial, std::in_place_t, T[]>);
+        STATIC_REQUIRE_FALSE(std::is_constructible_v<ResultTrivial, std::in_place_t, T[1]>);
+    });
+
+}
+
+TEMPLATE_TEST_CASE("varerr_result_constraints_emplace_error", "[varerr][result]",
+    TrivialType,
+    NoDefaultConstructType,
+    NoCopyAssignType,
+    NoMoveAssignType
+) {
+
+    using ErrorType = TestType;
+    using ValueType = DegenerateValueType;
+    using RowType = varerr::Row<DegenerateErrorType, ErrorType, ThrowAllErrorType>;
+    using UniverseType = pack_apply_t<bind_adapter<UniverseT>, RowType>;
+    using ResultType = varerr::result_from_row_t<UniverseType, ValueType, RowType>;
+
+    constexpr bool is_constructible = std::is_constructible_v<ErrorType, int>;
+    constexpr bool is_copy_constructible = std::is_copy_constructible_v<ErrorType>;
+    constexpr bool is_move_constructible = std::is_move_constructible_v<ErrorType>;
+    constexpr bool is_default_constructible = std::is_default_constructible_v<ErrorType>;
+
+    // The in-place error constructor is explicit.
+
+    STATIC_REQUIRE_FALSE(std::is_convertible_v<std::in_place_type_t<ErrorType>, ResultType>);
+    STATIC_REQUIRE(std::is_constructible_v<ResultType, std::in_place_type_t<ErrorType>> == is_default_constructible);
+
+    // The in-place error constructor inherits constructibility from the error
+    // alternative.
+
+    STATIC_REQUIRE(std::is_constructible_v<ResultType, std::in_place_type_t<ErrorType>, int> == is_constructible);
+    STATIC_REQUIRE(std::is_constructible_v<ResultType, std::in_place_type_t<ErrorType>, ErrorType&> == is_copy_constructible);
+    STATIC_REQUIRE(std::is_constructible_v<ResultType, std::in_place_type_t<ErrorType>, ErrorType&&> == is_move_constructible);
+    STATIC_REQUIRE(std::is_constructible_v<ResultType, std::in_place_type_t<ErrorType>, const ErrorType&> == is_copy_constructible);
+    STATIC_REQUIRE(std::is_constructible_v<ResultType, std::in_place_type_t<ErrorType>, const ErrorType&&> == is_copy_constructible);
+
+}
+
+TEST_CASE("varerr_result_constraints_emplace_error_types", "[varerr][result]") {
+
+    // The empty error row is never in-place constructible.
+
+    using ResultEmptyType = varerr::result_from_row_t<UniverseI, TrivialType, varerr::Row<>>;
+
+    STATIC_REQUIRE_FALSE(std::is_constructible_v<ResultEmptyType, std::in_place_type_t<TrivialType>>);
+    STATIC_REQUIRE_FALSE(std::is_constructible_v<ResultEmptyType, std::in_place_type_t<TrivialType>, int>);
+    STATIC_REQUIRE_FALSE(std::is_constructible_v<ResultEmptyType, std::in_place_type_t<TrivialType>, TrivialType>);
+
+    // The contructed error alternative must be exact in the error row.
+
+    using RowCollideType = varerr::Row<AliasA>;
+    using ResultCollideType = varerr::result_from_row_t<UniverseAlias, TrivialType, RowCollideType>;
+
+    iterate_type_pack<AliasA, AliasB, AliasC>([]<typename A>(const std::type_identity<A>) -> void {
+        iterate_cvref_matrix<A>([]<typename T>(const std::type_identity<T>) -> void {
+            constexpr bool is_alternative = varerr::row_elem_normalized_v<UniverseAlias, T, RowCollideType>;
+            if constexpr (is_alternative) {
+                constexpr bool is_exact = std::same_as<T, varerr::detail::row_subscript_t<
+                                              varerr::row_index_normalized_v<
+                                              UniverseAlias, T, RowCollideType>, RowCollideType>>;
+                STATIC_REQUIRE(std::is_constructible_v<ResultCollideType, std::in_place_type_t<T>, int> == is_exact);
+            } else {
+                STATIC_REQUIRE_FALSE(std::is_constructible_v<ResultCollideType, std::in_place_type_t<T>, int>);
+            }
+        });
+    });
+
+    // The error type must be in-place constructible from the arguments.
+
+    using RowType = varerr::Row<DegenerateErrorType, TrivialType, ThrowAllErrorType>;
+    using UniverseType = pack_apply_t<bind_adapter<UniverseT>, RowType>;
+    using ResultType = varerr::result_from_row_t<UniverseType, DegenerateErrorType, RowType>;
+
+    STATIC_REQUIRE(std::is_constructible_v<ResultType, std::in_place_type_t<TrivialType>, int>);
+    STATIC_REQUIRE(std::is_constructible_v<ResultType, std::in_place_type_t<TrivialType>, TrivialType>);
+
+    iterate_type_pack<int, TrivialType>([]<typename T>(const std::type_identity<T>) -> void {
+        STATIC_REQUIRE_FALSE(std::is_constructible_v<ResultType, std::in_place_type_t<TrivialType>, T*>);
+        STATIC_REQUIRE_FALSE(std::is_constructible_v<ResultType, std::in_place_type_t<TrivialType>, T, T>);
+        STATIC_REQUIRE_FALSE(std::is_constructible_v<ResultType, std::in_place_type_t<TrivialType>, T(*)()>);
+        STATIC_REQUIRE_FALSE(std::is_constructible_v<ResultType, std::in_place_type_t<TrivialType>, T[]>);
+        STATIC_REQUIRE_FALSE(std::is_constructible_v<ResultType, std::in_place_type_t<TrivialType>, T[1]>);
+    });
+
 }
 
 TEST_CASE("varerr_result_constraints_widen", "[varerr][result]") {
-    REQUIRE(false);
+
+    // The widening constructor is implicit.
+
+    iterate_cref_matrix<ResultVarSubType<int>>([]<typename T>(const std::type_identity<T>) -> void {
+        STATIC_REQUIRE(std::is_convertible_v<T, ResultVarSuperType<int>>);
+    });
+
+    // Volatile references are prohibited.
+
+    iterate_cvref_matrix<ResultVarSubType<int>>([]<typename T>(const std::type_identity<T>) -> void {
+        constexpr bool is_volatile = std::is_volatile_v<std::remove_reference_t<T>>;
+        STATIC_REQUIRE(std::is_constructible_v<ResultVarSuperType<int>, T> == !is_volatile);
+    });
+
+    // The widening constructor only accepts a non-empty proper subset of the
+    // target row. The empty row is handled by the copy and move constructors.
+
+    STATIC_REQUIRE(std::is_constructible_v<ResultVarEmptyType<int>, ResultVarEmptyType<int>>);
+    STATIC_REQUIRE(std::is_constructible_v<ResultVarSubType<int>, ResultVarEmptyType<int>>);
+    STATIC_REQUIRE(std::is_constructible_v<ResultVarSubType<int>, ResultVarSubType<int>>);
+    STATIC_REQUIRE(std::is_constructible_v<ResultVarSuperType<int>, ResultVarSubType<int>>);
+    STATIC_REQUIRE(std::is_constructible_v<ResultVarSuperType<int>, ResultVarSuperType<int>>);
+    STATIC_REQUIRE(std::is_constructible_v<ResultVarSuperType<int>, ResultVarLeftType<int>>);
+    STATIC_REQUIRE(std::is_constructible_v<ResultVarSuperType<int>, ResultVarRightType<int>>);
+
+    STATIC_REQUIRE_FALSE(std::is_constructible_v<ResultVarEmptyType<int>, ResultVarSuperType<int>>);
+    STATIC_REQUIRE_FALSE(std::is_constructible_v<ResultVarSubType<int>, ResultVarSuperType<int>>);
+    STATIC_REQUIRE_FALSE(std::is_constructible_v<ResultVarSubType<int>, ResultVarLeftType<int>>);
+    STATIC_REQUIRE_FALSE(std::is_constructible_v<ResultVarSubType<int>, ResultVarRightType<int>>);
+
+    // The value types must be identical.
+
+    STATIC_REQUIRE(std::is_constructible_v<ResultVarSuperType<int>, ResultVarSubType<int>>);
+    STATIC_REQUIRE_FALSE(std::is_constructible_v<ResultVarSuperType<int>, ResultVarSubType<double>>);
+    STATIC_REQUIRE_FALSE(std::is_constructible_v<ResultVarSuperType<int>, ResultVarSubType<const int>>);
+    STATIC_REQUIRE_FALSE(std::is_constructible_v<ResultVarSuperType<int>, ResultVarSubType<volatile int>>);
+    STATIC_REQUIRE_FALSE(std::is_constructible_v<ResultVarSuperType<int>, ResultVarSubType<int*>>);
+    STATIC_REQUIRE_FALSE(std::is_constructible_v<ResultVarSuperType<int>, ResultVarSubType<int(*)()>>);
+
+    // The universe types must be identical.
+
+    using RowEmptyType = varerr::Row<>;
+    using UniverseEmptyType = pack_apply_t<bind_adapter<UniverseT>, RowEmptyType>;
+    using ResultEmptyType = varerr::result_from_row_t<UniverseEmptyType, int, RowEmptyType>;
+
+    using RowSubType = varerr::Row<E<0>>;
+    using UniverseSubType = pack_apply_t<bind_adapter<UniverseT>, RowSubType>;
+    using ResultSubType = varerr::result_from_row_t<UniverseSubType, int, RowSubType>;
+
+    using RowSuperType = varerr::Row<E<0>, E<1>>;
+    using UniverseSuperType = pack_apply_t<bind_adapter<UniverseT>, RowSuperType>;
+    using ResultSuperType = varerr::result_from_row_t<UniverseSuperType, int, RowSuperType>;
+
+    STATIC_REQUIRE_FALSE(std::is_constructible_v<ResultSubType, ResultEmptyType>);
+    STATIC_REQUIRE_FALSE(std::is_constructible_v<ResultSuperType, ResultSubType>);
+
+    // The widening constructor only accepts an exact proper subset of the tar-
+    // get row.
+
+    using RowAliasSubType = varerr::Row<AliasA>;
+    using RowAliasSuperType = varerr::Row<AliasA, AliasC>;
+    using RowAliasCollideSuperType = varerr::Row<AliasB, AliasC>;
+
+    using ResultAliasSubType = varerr::result_from_row_t<UniverseAlias, int, RowAliasSubType>;
+    using ResultAliasSuperType = varerr::result_from_row_t<UniverseAlias, int, RowAliasSuperType>;
+    using ResultAliasCollideSuperType = varerr::result_from_row_t<UniverseAlias, int, RowAliasCollideSuperType>;
+
+    STATIC_REQUIRE(std::is_constructible_v<ResultAliasSuperType, ResultAliasSubType>);
+    STATIC_REQUIRE_FALSE(std::is_constructible_v<ResultAliasCollideSuperType, ResultAliasSubType>);
+
+}
+
+TEST_CASE("varerr_result_constraints_widen_types", "[varerr][result]") {
+
+    // A void value type is unconditionally widenable.
+
+    iterate_cref_matrix<ResultVarSubType<void>>([]<typename T>(const std::type_identity<T>) -> void {
+        STATIC_REQUIRE(std::is_constructible_v<ResultVarSuperType<void>, T>);
+    });
+
+    // The value type must be constructible from itself.
+
+    iterate_cref_matrix<ResultVarSubType<TrivialType>>([]<typename T>(const std::type_identity<T>) -> void {
+        STATIC_REQUIRE(std::is_constructible_v<ResultVarSuperType<TrivialType>, T>);
+    });
+
+    iterate_cref_matrix<ResultVarSubType<NoCopyConstructType>>([]<typename T>(const std::type_identity<T>) -> void {
+        STATIC_REQUIRE_FALSE(std::is_constructible_v<ResultVarSuperType<NoCopyConstructType>, T>);
+    });
+
+    iterate_cref_matrix<ResultVarSubType<NoMoveConstructType>>([]<typename T>(const std::type_identity<T>) -> void {
+        constexpr bool is_const = std::is_const_v<std::remove_reference_t<T>>;
+        constexpr bool is_lvalue_ref = std::is_lvalue_reference_v<T>;
+        constexpr bool is_constructible = is_const || is_lvalue_ref;
+        STATIC_REQUIRE(std::is_constructible_v<ResultVarSuperType<NoMoveConstructType>, T> == is_constructible);
+    });
+
 }
 
 TEMPLATE_TEST_CASE("varerr_result_constraints_has_value", "[varerr][result]",
@@ -290,17 +792,13 @@ TEMPLATE_TEST_CASE("varerr_result_constraints_has_error", "[varerr][result]",
 ) {
 
     using ResultType = TestType;
-    constexpr std::size_t kTestIndexBound = 7;
 
     iterate_cvref_matrix<ResultType>([]<typename T>(const std::type_identity<T>) -> void {
-        iterate_index_sequence<kTestIndexBound>([]<std::size_t I>(const index_constant<I>) -> void {
-            constexpr bool is_volatile = std::is_volatile_v<std::remove_reference_t<T>>;
-            STATIC_REQUIRE(IsResultHasErrorWellFormed<T> == !is_volatile);
-        });
+        constexpr bool is_volatile = std::is_volatile_v<std::remove_reference_t<T>>;
+        STATIC_REQUIRE(IsResultHasErrorWellFormed<T> == !is_volatile);
     });
 
 }
-
 
 TEMPLATE_TEST_CASE("varerr_result_constraints_holds_error", "[varerr][result]",
     (HomResult<void, 0>),
@@ -421,6 +919,8 @@ TEMPLATE_TEST_CASE("varerr_result_constraints_error", "[varerr][result]",
 
 }
 
+// Return value tests
+
 TEST_CASE("varerr_result_return_has_value", "[varerr][result]") {
     REQUIRE(false); /* trivial */
 }
@@ -518,16 +1018,117 @@ TEST_CASE("varerr_result_return_error", "[varerr][result]") {
 
 }
 
+// Noexcept tests
+
+TEST_CASE("varerr_result_noexcept_default", "[varerr][result]") {
+
+    using ResultDefType = HomResult<TrivialType, 1>;
+    using ResultDefVoidType = HomResult<void, 1>;
+    using ResultDefThrowType = HomResult<ThrowDefaultConstructType, 1>;
+
+    // The default constructor inherits nothrow default constructibility from
+    // the value type.
+
+    STATIC_REQUIRE(std::is_nothrow_default_constructible_v<ResultDefType>);
+    STATIC_REQUIRE(std::is_nothrow_default_constructible_v<ResultDefVoidType>);
+    STATIC_REQUIRE_FALSE(std::is_nothrow_default_constructible_v<ResultDefThrowType>);
+
+}
+
 TEST_CASE("varerr_result_noexcept_emplace_value", "[varerr][result]") {
-    REQUIRE(false);
+
+    using ResultVoidType = InvResult<void, ThrowAllErrorType>;
+    using ResultThrowType = InvResult<ConditionalThrowType, ThrowAllErrorType>;
+
+    // The in-place value constructor inherits nothrow constructibility from the
+    // value (but not the error) type.
+
+    STATIC_REQUIRE(std::is_constructible_v<ResultThrowType, std::in_place_t, int>);
+    STATIC_REQUIRE(std::is_constructible_v<ResultThrowType, std::in_place_t, double>);
+
+    STATIC_REQUIRE(std::is_nothrow_constructible_v<ConditionalThrowType, int>);
+    STATIC_REQUIRE_FALSE(std::is_nothrow_constructible_v<ConditionalThrowType, double>);
+
+    STATIC_REQUIRE(std::is_nothrow_constructible_v<ResultThrowType, std::in_place_t, int>);
+    STATIC_REQUIRE_FALSE(std::is_nothrow_constructible_v<ResultThrowType, std::in_place_t, double>);
+
+    // The in-place value constructor is unconditionally noexcept.
+
+    STATIC_REQUIRE(std::is_nothrow_constructible_v<ResultVoidType, std::in_place_t>);
+
 }
 
 TEST_CASE("varerr_result_noexcept_emplace_error", "[varerr][result]") {
-    REQUIRE(false);
+
+    // std::is_nothrow_constructible requires nothrow destructibility on every
+    // major implementation (LWG 2116). This prevents ThrowAllValueType from
+    // being usable for the non-throwing branch of the test.
+
+    using ResultThrowType = InvResult<ThrowAllButDestructValueType, ThrowAllErrorType, ConditionalThrowType>;
+
+    // The in-place error constructor inherits nothrow constructibility from the
+    // error (but not the value) type.
+
+    STATIC_REQUIRE(std::is_constructible_v<ResultThrowType, std::in_place_type_t<ConditionalThrowType>, int>);
+    STATIC_REQUIRE(std::is_constructible_v<ResultThrowType, std::in_place_type_t<ConditionalThrowType>, double>);
+
+    STATIC_REQUIRE(std::is_nothrow_constructible_v<ConditionalThrowType, int>);
+    STATIC_REQUIRE_FALSE(std::is_nothrow_constructible_v<ConditionalThrowType, double>);
+
+    STATIC_REQUIRE(std::is_nothrow_constructible_v<ResultThrowType, std::in_place_type_t<ConditionalThrowType>, int>);
+    STATIC_REQUIRE_FALSE(std::is_nothrow_constructible_v<ResultThrowType, std::in_place_type_t<ConditionalThrowType>, double>);
+
 }
 
-TEST_CASE("varerr_result_noexcept_emplace_widen", "[varerr][result]") {
-    REQUIRE(false);
+TEMPLATE_TEST_CASE("varerr_result_noexcept_widen", "[varerr][result]",
+    (varerr::Row<>),
+    (varerr::Row<ThrowAllErrorType>)
+) {
+
+    using RowThrowBase = TestType;
+    using RowThrowExtend = varerr::Row<E<0>, ThrowAllErrorType, E<1>>;
+    using UniverseThrow = pack_apply_t<bind_adapter<UniverseT>, RowThrowExtend>;
+
+    // The widening constructor is unconditionally noexcept when the value type
+    // is void.
+
+    using ResultVoidBase = varerr::result_from_row_t<UniverseThrow, void, RowThrowBase>;
+    using ResultVoidExtend = varerr::result_from_row_t<UniverseThrow, void, RowThrowExtend>;
+
+    iterate_cref_matrix<ResultVoidBase>([]<typename T>(const std::type_identity<T>) -> void {
+        STATIC_REQUIRE(noexcept(ResultVoidExtend(std::declval<T>())));
+    });
+
+    // The widening constructor inherits nothrow constructibility from the for-
+    // warded value type when the value type is non-void.
+
+    using ResultTrivialBase = varerr::result_from_row_t<UniverseThrow, TrivialType, RowThrowBase>;
+    using ResultTrivialExtend = varerr::result_from_row_t<UniverseThrow, TrivialType, RowThrowExtend>;
+
+    iterate_cref_matrix<ResultTrivialBase>([]<typename T>(const std::type_identity<T>) -> void {
+        STATIC_REQUIRE(noexcept(ResultTrivialExtend(std::declval<T>())));
+    });
+
+    using ResultThrowCopyConstructBase = varerr::result_from_row_t<UniverseThrow, ThrowCopyConstructType, RowThrowBase>;
+    using ResultThrowCopyConstructExtend = varerr::result_from_row_t<UniverseThrow, ThrowCopyConstructType, RowThrowExtend>;
+
+    iterate_cref_matrix<ResultThrowCopyConstructBase>([]<typename T>(const std::type_identity<T>) -> void {
+        constexpr bool is_const = std::is_const_v<std::remove_reference_t<T>>;
+        constexpr bool is_lvalue_ref = std::is_lvalue_reference_v<T>;
+        constexpr bool is_copied = is_const || is_lvalue_ref;
+        STATIC_REQUIRE(noexcept(ResultThrowCopyConstructExtend(std::declval<T>())) == !is_copied);
+    });
+
+    using ResultThrowMoveConstructBase = varerr::result_from_row_t<UniverseThrow, ThrowMoveConstructType, RowThrowBase>;
+    using ResultThrowMoveConstructExtend = varerr::result_from_row_t<UniverseThrow, ThrowMoveConstructType, RowThrowExtend>;
+
+    iterate_cref_matrix<ResultThrowMoveConstructBase>([]<typename T>(const std::type_identity<T>) -> void {
+        constexpr bool is_const = std::is_const_v<std::remove_reference_t<T>>;
+        constexpr bool is_lvalue_ref = std::is_lvalue_reference_v<T>;
+        constexpr bool is_copied = is_const || is_lvalue_ref;
+        STATIC_REQUIRE(noexcept(ResultThrowMoveConstructExtend(std::declval<T>())) == is_copied);
+    });
+
 }
 
 TEMPLATE_TEST_CASE("varerr_result_noexcept_has_value", "[varerr][result]",
@@ -636,18 +1237,28 @@ TEMPLATE_TEST_CASE("varerr_result_noexcept_error", "[varerr][result]",
     iterate_cref_matrix<ResultType>([]<typename T>(const std::type_identity<T>) -> void {
         constexpr bool is_lvalue_ref = std::is_lvalue_reference_v<T>;
         if constexpr (is_lvalue_ref) {
-            STATIC_REQUIRE(noexcept(std::declval<T>().template error<ErrorType>()) == is_lvalue_ref);
+            STATIC_REQUIRE(noexcept(std::declval<T>().template error<ErrorType>()));
         }
     });
 
 }
 
-TEST_CASE("varerr_result_functional_emplace", "[varerr][result]") {
-    REQUIRE(false);
+// Functional tests
+
+TEST_CASE("varerr_result_functional_default", "[varerr][result]") {
+    REQUIRE(false); /* default constructor */
+}
+
+TEST_CASE("varerr_result_functional_emplace_value", "[varerr][result]") {
+    REQUIRE(false); /* in-place value constructor */
+}
+
+TEST_CASE("varerr_result_functional_emplace_error", "[varerr][result]") {
+    REQUIRE(false); /* in-place error constructor */
 }
 
 TEST_CASE("varerr_result_functional_widen", "[varerr][result]") {
-    REQUIRE(false);
+    REQUIRE(false); /* in-place error constructor */
 }
 
 TEST_CASE("varerr_result_functional_has_value", "[varerr][result]") {

@@ -21,6 +21,14 @@ using mask_constant = std::integral_constant<std::size_t, I>;
 template <std::size_t I>
 using code_constant = std::integral_constant<std::size_t, I>;
 
+// Parameter pack.
+
+template <typename... Es>
+struct type_pack {};
+
+template <typename... Es>
+using type_pack_t = type_pack<Es...>;
+
 // Invoke a function F for every index I in Is.
 
 template <std::size_t... Is, typename F>
@@ -35,6 +43,22 @@ constexpr void iterate_index_sequence(F f) {
     [&]<std::size_t... Is>(std::index_sequence<Is...>) {
         (f(std::integral_constant<std::size_t, Is> {}), ...);
     }(std::make_index_sequence<N> {});
+}
+
+// Invoke a function F for every type T in Ts.
+
+template <typename... Ts, typename F>
+constexpr void iterate_type_pack(F f) {
+    (f(std::type_identity<Ts> {}), ...);
+}
+
+// Invoke a function F for every type carried by a type pack.
+
+template <typename... Ts, typename F>
+constexpr void iterate_type_list(F f) {
+    [&]<typename T>(type_pack_t<Ts...>) {
+        (f(std::type_identity<Ts> {}), ...);
+    }(type_pack<Ts...> {});
 }
 
 // Invoke a function F for every const-qualified versions of T.
@@ -90,11 +114,6 @@ using cvref_qualify_like_t = std::conditional_t<
     cv_qualify_like_t<S, E>&,
     cv_qualify_like_t<S, E>&&
 >;
-
-// Parameter pack.
-
-template <typename... Es>
-struct type_pack_t;
 
 // Determine whether a type occurs in a parameter pack.
 

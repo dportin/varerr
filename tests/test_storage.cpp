@@ -106,11 +106,17 @@ TEST_CASE("varerr_storage_trivial_propagate", "[varerr][storage]") {
     STATIC_REQUIRE(std::is_trivially_copyable_v<varerr::detail::Storage<NoCopyAssignType>>);
     STATIC_REQUIRE_FALSE(std::is_copy_assignable_v<varerr::detail::Storage<NoCopyAssignType>>);
 
+    // The deleted move constructor does not propagate unless the copy construc-
+    // tor is also deleted.
+
     STATIC_REQUIRE(std::is_trivially_copyable_v<varerr::detail::Storage<NoMoveConstructType>>);
-    STATIC_REQUIRE_FALSE(std::is_move_constructible_v<varerr::detail::Storage<NoMoveConstructType>>);
+    STATIC_REQUIRE(std::is_move_constructible_v<varerr::detail::Storage<NoMoveConstructType>>);
+
+    // The deleted move assignment operator does not propagate unless the copy
+    // assignment operator is also deleted.
 
     STATIC_REQUIRE(std::is_trivially_copyable_v<varerr::detail::Storage<NoMoveAssignType>>);
-    STATIC_REQUIRE_FALSE(std::is_move_assignable_v<varerr::detail::Storage<NoMoveAssignType>>);
+    STATIC_REQUIRE(std::is_move_assignable_v<varerr::detail::Storage<NoMoveAssignType>>);
 
 }
 

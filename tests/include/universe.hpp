@@ -233,7 +233,6 @@ struct UniverseAlias::rank_trait<AliasB> : std::integral_constant<std::size_t, 0
 template <>
 struct UniverseAlias::rank_trait<AliasC> : std::integral_constant<std::size_t, 1> {};
 
-
 // Assorted types designed to break specific invariants.
 
 // Entirely trivial type.
@@ -245,10 +244,59 @@ struct TrivialType {
 static_assert(std::is_trivial_v<TrivialType>);
 static_assert(std::is_default_constructible_v<TrivialType>);
 
+// Degenerate value type.
+
+struct DegenerateValueType {
+    int value_;
+    DegenerateValueType() = delete;
+    explicit DegenerateValueType(int value) noexcept(false) : value_(value) {}
+    DegenerateValueType(const DegenerateValueType&) = delete;
+    DegenerateValueType(DegenerateValueType&&) = delete;
+    DegenerateValueType& operator=(const DegenerateValueType&) = delete;
+    DegenerateValueType& operator=(DegenerateValueType&&) = delete;
+};
+
+struct DegenerateErrorType {
+    int value_;
+    DegenerateErrorType() = delete;
+    explicit DegenerateErrorType(int value) noexcept(false) : value_(value) {}
+    DegenerateErrorType(const DegenerateErrorType&) noexcept = default;
+    DegenerateErrorType(DegenerateErrorType&&) noexcept = default;
+    DegenerateErrorType& operator=(const DegenerateErrorType&) = delete;
+    DegenerateErrorType& operator=(DegenerateErrorType&&) = delete;
+};
+
+// DegenerateErrorType has a deleted default constructor and is therefore not
+// trivial. Clang (16.2.0) incorrectly reports that the class is trivial.
+
+static_assert(std::is_trivially_copyable_v<DegenerateErrorType>);
+static_assert(std::is_trivially_destructible_v<DegenerateErrorType>);
+static_assert(std::is_trivially_copy_constructible_v<DegenerateErrorType>);
+static_assert(std::is_trivially_move_constructible_v<DegenerateErrorType>);
+static_assert(!std::is_trivially_copy_assignable_v<DegenerateErrorType>);
+static_assert(!std::is_trivially_move_assignable_v<DegenerateErrorType>);
+static_assert(!std::is_trivially_default_constructible_v<DegenerateErrorType>);
+
+static_assert(std::is_destructible_v<DegenerateErrorType>);
+static_assert(std::is_copy_constructible_v<DegenerateErrorType>);
+static_assert(std::is_move_constructible_v<DegenerateErrorType>);
+static_assert(!std::is_copy_assignable_v<DegenerateErrorType>);
+static_assert(!std::is_move_assignable_v<DegenerateErrorType>);
+static_assert(!std::is_default_constructible_v<DegenerateErrorType>);
+
+static_assert(std::is_nothrow_destructible_v<DegenerateErrorType>);
+static_assert(std::is_nothrow_copy_constructible_v<DegenerateErrorType>);
+static_assert(std::is_nothrow_move_constructible_v<DegenerateErrorType>);
+static_assert(!std::is_nothrow_constructible_v<DegenerateErrorType, int>);
+static_assert(!std::is_nothrow_default_constructible_v<DegenerateErrorType>);
+static_assert(!std::is_nothrow_copy_assignable_v<DegenerateErrorType>);
+static_assert(!std::is_nothrow_move_assignable_v<DegenerateErrorType>);
+
 // Trivially copy assignable but not copy constructible.
 
 struct NoCopyConstructType {
     int value_;
+    NoCopyConstructType(int value) : value_(value) {}
     NoCopyConstructType(const NoCopyConstructType&) = delete;
     NoCopyConstructType& operator=(const NoCopyConstructType&) = default;
 };
@@ -260,6 +308,7 @@ static_assert(!std::is_copy_constructible_v<NoCopyConstructType>);
 
 struct NoCopyAssignType {
     int value_;
+    NoCopyAssignType(int value) : value_(value) {}
     NoCopyAssignType(const NoCopyAssignType&) = default;
     NoCopyAssignType& operator=(const NoCopyAssignType&) = delete;
 };
@@ -271,8 +320,12 @@ static_assert(!std::is_copy_assignable_v<NoCopyAssignType>);
 
 struct NoMoveConstructType {
     int value_;
+    NoMoveConstructType() = default;
+    explicit NoMoveConstructType(int value) : value_(value) {}
+    NoMoveConstructType(const NoMoveConstructType&) = default;
     NoMoveConstructType(NoMoveConstructType&&) = delete;
-    NoMoveConstructType& operator=(NoMoveConstructType&&) noexcept = default;
+    NoMoveConstructType& operator=(const NoMoveConstructType&) = default;
+    NoMoveConstructType& operator=(NoMoveConstructType&&) = default;
 };
 
 static_assert(std::is_trivially_move_assignable_v<NoMoveConstructType>);
@@ -282,8 +335,12 @@ static_assert(!std::is_move_constructible_v<NoMoveConstructType>);
 
 struct NoMoveAssignType {
     int value_;
+    NoMoveAssignType() = default;
+    explicit NoMoveAssignType(int value) : value_(value) {}
+    NoMoveAssignType(const NoMoveAssignType&) = default;
     NoMoveAssignType(NoMoveAssignType&&) = default;
-    NoMoveAssignType& operator=(NoMoveAssignType&&) noexcept = delete;
+    NoMoveAssignType& operator=(const NoMoveAssignType&) = default;
+    NoMoveAssignType& operator=(NoMoveAssignType&&) = delete;
 };
 
 static_assert(std::is_trivially_move_constructible_v<NoMoveAssignType>);
@@ -401,6 +458,7 @@ struct NoDefaultConstructType {
     int value_;
     NoDefaultConstructType() = delete;
     ~NoDefaultConstructType() = default;
+    explicit NoDefaultConstructType(int value) : value_(value) {}
     NoDefaultConstructType(const NoDefaultConstructType&) = default;
     NoDefaultConstructType(NoDefaultConstructType&&) = default;
     NoDefaultConstructType& operator=(const NoDefaultConstructType&) = default;
@@ -429,8 +487,8 @@ static_assert(!std::is_nothrow_constructible_v<ThrowConstructType, int>);
 // Default constructible but not nothrow default constructible.
 
 struct ThrowDefaultConstructType {
-    int value_;
-    ThrowDefaultConstructType() noexcept(false) {}
+    int value_ {};
+    constexpr ThrowDefaultConstructType() noexcept(false) {}
     ~ThrowDefaultConstructType() noexcept = default;
     ThrowDefaultConstructType(const ThrowDefaultConstructType&) noexcept = default;
     ThrowDefaultConstructType(ThrowDefaultConstructType&&) noexcept = default;
@@ -462,6 +520,28 @@ static_assert(!std::is_nothrow_move_constructible_v<ThrowAllValueType>);
 static_assert(!std::is_nothrow_copy_assignable_v<ThrowAllValueType>);
 static_assert(!std::is_nothrow_move_assignable_v<ThrowAllValueType>);
 
+// std::is_nothrow_constructible requires nothrow destructibility on some imple-
+// mentations (LWG 2116).
+
+struct ThrowAllButDestructValueType {
+    int value_;
+    ThrowAllButDestructValueType() noexcept(false) {}
+    ~ThrowAllButDestructValueType() noexcept {}
+    ThrowAllButDestructValueType(int) noexcept(false) {}
+    ThrowAllButDestructValueType(const ThrowAllButDestructValueType&) noexcept(false) {}
+    ThrowAllButDestructValueType(ThrowAllButDestructValueType&&) noexcept(false) {} // NOLINT
+    ThrowAllButDestructValueType& operator=(const ThrowAllButDestructValueType&) noexcept(false) { return *this; } // NOLINT
+    ThrowAllButDestructValueType& operator=(ThrowAllButDestructValueType&&) noexcept(false) { return *this; }
+};
+
+static_assert(std::is_nothrow_destructible_v<ThrowAllButDestructValueType>);
+static_assert(!std::is_nothrow_constructible_v<ThrowAllButDestructValueType, int>);
+static_assert(!std::is_nothrow_default_constructible_v<ThrowAllButDestructValueType>);
+static_assert(!std::is_nothrow_copy_constructible_v<ThrowAllButDestructValueType>);
+static_assert(!std::is_nothrow_move_constructible_v<ThrowAllButDestructValueType>);
+static_assert(!std::is_nothrow_copy_assignable_v<ThrowAllButDestructValueType>);
+static_assert(!std::is_nothrow_move_assignable_v<ThrowAllButDestructValueType>);
+
 // Error type with maximal exception surface (modulo P1286R2).
 
 struct ThrowAllErrorType {
@@ -486,9 +566,15 @@ static_assert(std::is_nothrow_copy_constructible_v<ThrowAllErrorType>);
 static_assert(std::is_nothrow_move_constructible_v<ThrowAllErrorType>);
 
 static_assert(!std::is_nothrow_constructible_v<ThrowAllErrorType, int>);
-static_assert(!std::is_nothrow_default_constructible_v<ThrowAllErrorType>);
 static_assert(!std::is_nothrow_copy_assignable_v<ThrowAllErrorType>);
 static_assert(!std::is_nothrow_move_assignable_v<ThrowAllErrorType>);
+
+// P1286R2 permits an explicitly defaulted function to have an explicit noexcept
+// specifier without losing triviality. The above default constructor should th-
+// erefore be trivial and (potentially) throwing. Unfortunately, GCC erroneously
+// reports the constructor as nothrow.
+
+// static_assert(!std::is_nothrow_default_constructible_v<ThrowAllErrorType>);
 
 // Destructible but not nothrow destructible.
 

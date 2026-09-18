@@ -10,7 +10,6 @@
 #include <concepts>
 #include <expected>
 #include <functional>
-#include <linux/limits.h>
 #include <memory>
 #include <type_traits>
 #include <utility>
@@ -302,8 +301,10 @@ struct BasicResult final {
 
     template <typename Narrow>
     requires IsResult<Narrow> &&
+             IsNonVolatile<Narrow> &&
              std::same_as<result_value_t<Narrow>, T> &&
              std::same_as<result_universe_t<Narrow>, M> &&
+             IsVoidableConstructibleLike<Narrow, T> &&
              IsNormalizedRow<M, result_row_t<Narrow>> &&
              row_proper_subset_normalized_v<M, result_row_t<Narrow>, Row<Es...>> &&
              IsRowExactInRow<M, Row<Es...>, result_row_t<Narrow>>
@@ -598,7 +599,7 @@ struct BasicResult final {
 template <typename M, typename T, typename... Es>
 requires IsTriviallyStorablePack<Es...> &&
          IsNormalizedPack<M, Es...>
-using result_from_normalized_pack_t = BasicResult<M, Es...>;
+using result_from_normalized_pack_t = BasicResult<M, T, Es...>;
 
 template <typename M, typename T, typename... Es>
 requires IsTriviallyStorablePack<Es...> &&

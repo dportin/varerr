@@ -400,11 +400,11 @@ TEST_CASE("varerr_status_construct_widen", "[varerr][status]") {
 
     iterate_index_array<1, 3>([]<std::size_t I>(const index_constant<I>) -> void {
 
-        constexpr StatusBase status_base { std::in_place_type<E<I>>, std::size_t {42} };
+        constexpr StatusBase status_base { std::in_place_type<E<I>>, std::size_t {I + 42} };
         constexpr StatusPrefixed status_prefixed { status_base };
 
         STATIC_REQUIRE(status_prefixed.holds<E<I>>());
-        STATIC_REQUIRE(status_prefixed.get<E<I>>().value() == 42);
+        STATIC_REQUIRE(status_prefixed.get<E<I>>().value() == I + 42);
         STATIC_REQUIRE(std::same_as<varerr::status_alternative_t<StatusPrefixed, status_prefixed.index()>, E<I>>);
 
     });
@@ -413,11 +413,11 @@ TEST_CASE("varerr_status_construct_widen", "[varerr][status]") {
 
     iterate_index_array<1, 3>([]<std::size_t I>(const index_constant<I>) -> void {
 
-        constexpr StatusBase status_base { std::in_place_type<E<I>>, std::size_t {42} };
+        constexpr StatusBase status_base { std::in_place_type<E<I>>, std::size_t {I + 42} };
         constexpr StatusUnPrefixed status_unprefixed { status_base };
 
         STATIC_REQUIRE(status_unprefixed.holds<E<I>>());
-        STATIC_REQUIRE(status_unprefixed.get<E<I>>().value() == 42);
+        STATIC_REQUIRE(status_unprefixed.get<E<I>>().value() == I + 42);
         STATIC_REQUIRE(std::same_as<varerr::status_alternative_t<StatusUnPrefixed, status_unprefixed.index()>, E<I>>);
 
     });

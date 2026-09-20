@@ -6,6 +6,12 @@
 
 namespace varerr {
 
+template <typename... Es>
+struct type_pack {};
+
+template <typename... Es>
+using type_pack_t = type_pack<Es...>;
+
 // Transfer const qualifier from one possible ref-qualified type to another.
 
 template <typename From, typename To>
@@ -16,11 +22,20 @@ using transfer_const_t = std::conditional_t<std::is_const_v<std::remove_referenc
 template <typename T>
 concept IsNonVoid = !std::is_void_v<std::remove_reference_t<T>>;
 
+template <typename... Ts>
+concept IsNonVoidPack = (IsNonVoid<Ts> && ...);
+
 template <typename T>
 concept IsNonVolatile = !std::is_volatile_v<std::remove_reference_t<T>>;
 
+template <typename... Ts>
+concept IsNonVolatilePack = (IsNonVolatile<Ts> && ...);
+
 template <typename T>
 concept IsNonVolatileLValueReference = std::is_lvalue_reference_v<T> && IsNonVolatile<T>;
+
+template <typename... Ts>
+concept IsNonVolatileLValueReferencePack = (IsNonVolatileLValueReference<Ts> && ...);
 
 // Determine whether every element of a parameter pack has the same type.
 

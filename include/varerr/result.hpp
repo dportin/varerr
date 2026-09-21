@@ -19,147 +19,48 @@
 
 namespace varerr {
 
-// BEGIN SECTION THAT BELONGS IN UTILITIES.HPP
-
-// Apply a metafunction F to a voidable type T.
+// Forward a type T like Self.
 
 namespace detail {
 
-template <typename F, typename T>
-struct voidable_apply_impl {};
-
-template <typename F, typename T>
-requires IsNonVoid<T> &&
-         requires { typename F::template bind<T>; }
-struct voidable_apply_impl<F, T> {
-    using bind_type = typename F::template bind<T>;
-};
-
-template <typename F>
-requires requires { typename F::template bind<>; }
-struct voidable_apply_impl<F, void> {
-    using bind_type = typename F::template bind<>;
-};
+template <typename Self, typename T>
+struct forward_argument_like : std::type_identity<decltype(std::forward_like<Self>(std::declval<T&>()))> {};
 
 } // namespace detail
 
-// Determine whether a metafunction F can be applied to a voidable type T.
-
-template <typename F, typename T>
-concept IsVoidableApplyBindWellFormed = requires {
-    typename detail::voidable_apply_impl<F, T>::bind_type;
-};
-
-template <typename F, typename T>
-concept IsVoidableApplyTypeWellFormed = IsVoidableApplyBindWellFormed<F, T> && requires {
-    typename detail::voidable_apply_impl<F, T>::bind_type::type;
-};
-
-template <typename F, typename T>
-concept IsVoidableApplyValueWellFormed = IsVoidableApplyBindWellFormed<F, T> && requires {
-    detail::voidable_apply_impl<F, T>::bind_type::value;
-};
-
-// Apply a metafunction F to a voidable type T.
-
-template <typename F, typename T>
-requires IsVoidableApplyBindWellFormed<F, T>
-struct voidable_apply : detail::voidable_apply_impl<F, T> {};
-
-template <typename F, typename T>
-requires IsVoidableApplyTypeWellFormed<F, T>
-using voidable_apply_t = voidable_apply<F, T>::bind_type::type;
-
-template <typename F, typename T>
-requires IsVoidableApplyValueWellFormed<F, T>
-inline constexpr auto voidable_apply_v = voidable_apply<F, T>::bind_type::value;
-
-// Forward a type T like Self.
-
 template <typename Self, typename T>
-struct forward_argument : std::type_identity<decltype(std::forward_like<Self>(std::declval<T&>()))> {};
-
-template <typename Self, typename T>
-using forward_argument_t = forward_argument<Self, T>::type;
-
-// template <typename Self, typename T>
-// struct forward_like : std::type_identity<decltype(std::forward_like<Self>(std::declval<T&>()))> {};
-
-// template <typename Self, typename T>
-// using forward_like_t = forward_like<Self, T>::type;
+using forward_argument_like_t = detail::forward_argument_like<Self, T>::type;
 
 // Forward a voidable type T like Self.
 
 namespace detail {
 
 template <typename Self, typename T>
-struct forward_voidable_argument : std::type_identity<forward_argument_t<Self, T>> {};
+struct forward_voidable_argument_like : std::type_identity<forward_argument_like_t<Self, T>> {};
 
 template <typename Self>
-struct forward_voidable_argument<Self, void> : std::type_identity<void> {};
-
-// template <typename Self, typename T>
-// struct forward_voidable_like : std::type_identity<forward_like_t<Self, T>> {};
-
-// template <typename Self>
-// struct forward_voidable_like<Self, void> : std::type_identity<void> {};
+struct forward_voidable_argument_like<Self, void> : std::type_identity<void> {};
 
 } // namespace detail
 
 template <typename Self, typename T>
-using forward_voidable_argument_t = detail::forward_voidable_argument<Self, T>::type;
-
-// template <typename Self, typename T>
-// using forward_voidable_like_t = detail::forward_voidable_like<Self, T>::type;
-
-// The forwarding adapter forwards each argument like Self to the metafunction F.
-
-template <typename Self, typename F>
-struct bind_forward_adapter {
-    template <typename... Es>
-    using bind = typename F::template bind<forward_argument_t<Self, Es>...>;
-};
-
-template <typename Self, typename F, typename M>
-using forwarding_pack_apply_t = pack_apply_t<bind_forward_adapter<Self, F>, M>;
-
-template <typename Self, typename F, typename M>
-inline constexpr auto forward_pack_apply_v = pack_apply_v<bind_forward_adapter<Self, F>, M>;
-
-template <typename Self, typename F, typename T>
-using forwarding_voidable_apply_t = voidable_apply_t<bind_forward_adapter<Self, F>, T>;
-
-template <typename Self, typename F, typename T>
-inline constexpr auto forwarding_voidable_apply_v = voidable_apply_v<bind_forward_adapter<Self, F>, T>;
-
-// END SECTION THAT BELONGS IN UTILITIES.HPP
-
-// template <typename F>
-// struct bind_invocable_adapter {
-//     template <typename... Es>
-//     using bind = std::bool_constant<std::invocable<F, Es...>>;
-// };
-
+using forward_voidable_argument_like_t = detail::forward_voidable_argument_like<Self, T>::type;
 
 // Invoke a function F with a voidable T.
 
 template <typename F, typename T>
-using voidable_invoke_result_t =
-    voidable_apply_t<bind_meta_adapter<std::invoke_result, F>, T>;
+using voidable_invoke_result_t = voidable_apply_t<bind_meta_adapter<std::invoke_result, F>, T>;
 
 template <typename Self, typename F, typename T>
-using voidable_invoke_result_like_t =
-    forwarding_voidable_apply_t<Self, bind_meta_adapter<std::invoke_result, F>, T>;
+using voidable_invoke_result_like_t = voidable_invoke_result_t<F, forward_voidable_argument_like_t<Self, T>>;
 
 // Determine whether a function F is invocable with a voidable T.
 
 template <typename F, typename T>
-inline constexpr bool is_voidable_invocable_v =
-    voidable_apply_v<bind_meta_adapter<std::is_invocable, F>, T>;
+inline constexpr bool is_voidable_invocable_v = voidable_apply_v<bind_meta_adapter<std::is_invocable, F>, T>;
 
 template <typename Self, typename F, typename T>
-inline constexpr bool is_voidable_invocable_like_v =
-    forwarding_voidable_apply_v<Self, bind_meta_adapter<std::is_invocable, F>, T>;
+inline constexpr bool is_voidable_invocable_like_v = is_voidable_invocable_v<F, forward_voidable_argument_like_t<Self, T>>;
 
 template <typename F, typename T>
 concept IsVoidableInvocable = is_voidable_invocable_v<F, T>;
@@ -170,12 +71,10 @@ concept IsVoidableInvocableLike = is_voidable_invocable_like_v<Self, F, T>;
 // Determine whether a function F is nothrow invocable with a voidable T.
 
 template <typename F, typename T>
-inline constexpr bool is_nothrow_voidable_invocable_v =
-    voidable_apply_v<bind_meta_adapter<std::is_nothrow_invocable, F>, T>;
+inline constexpr bool is_nothrow_voidable_invocable_v = voidable_apply_v<bind_meta_adapter<std::is_nothrow_invocable, F>, T>;
 
 template <typename Self, typename F, typename T>
-inline constexpr bool is_nothrow_voidable_invocable_like_v =
-    forwarding_voidable_apply_v<Self, bind_meta_adapter<std::is_nothrow_invocable, F>, T>;
+inline constexpr bool is_nothrow_voidable_invocable_like_v = is_nothrow_voidable_invocable_v<F, forward_voidable_argument_like_t<Self, T>>;
 
 template <typename F, typename T>
 concept IsNothrowVoidableInvocable = is_nothrow_voidable_invocable_v<F, T>;
@@ -196,18 +95,34 @@ struct is_voidable_constructible<void, Args...> : std::bool_constant<sizeof...(A
 } // namespace detail
 
 template <typename T, typename... Args>
-inline constexpr bool is_voidable_constructible_v =
-    detail::is_voidable_constructible<T, Args...>::value;
+inline constexpr bool is_voidable_constructible_v = detail::is_voidable_constructible<T, Args...>::value;
+
+template <typename T, typename R>
+inline constexpr bool is_voidable_constructible_from_v = voidable_apply_v<bind_meta_adapter<detail::is_voidable_constructible, T>, R>;
+
+template <typename T>
+inline constexpr bool is_voidable_constructible_from_self_v = is_voidable_constructible_from_v<T, T>;
+
+template <typename Self, typename T, typename R>
+inline constexpr bool is_voidable_constructible_from_like_v = is_voidable_constructible_from_v<T, forward_voidable_argument_like_t<Self, R>>;
 
 template <typename Self, typename T>
-inline constexpr bool is_voidable_self_constructible_like_v =
-    forwarding_voidable_apply_v<Self, bind_meta_adapter<detail::is_voidable_constructible, T>, T>;
+inline constexpr bool is_voidable_constructible_from_self_like_v = is_voidable_constructible_from_like_v<Self, T, T>;
 
 template <typename T, typename... Args>
 concept IsVoidableConstructible = is_voidable_constructible_v<T, Args...>;
 
+template <typename T, typename R>
+concept IsVoidableConstructibleFrom = is_voidable_constructible_from_v<T, R>;
+
+template <typename T>
+concept IsVoidableConstructibleFromSelf = is_voidable_constructible_from_self_v<T>;
+
+template <typename Self, typename T, typename R>
+concept IsVoidableConstructibleFromLike = is_voidable_constructible_from_like_v<Self, T, R>;
+
 template <typename Self, typename T>
-concept IsVoidableSelfConstructibleLike = is_voidable_self_constructible_like_v<Self, T>;
+concept IsVoidableConstructibleFromSelfLike = is_voidable_constructible_from_self_like_v<Self, T>;
 
 // Determine whether a voidable T is nothrow constructible from Args.
 
@@ -222,31 +137,60 @@ struct is_nothrow_voidable_constructible<void, Args...> : std::bool_constant<siz
 } // namespace detail
 
 template <typename T, typename... Args>
-inline constexpr bool is_nothrow_voidable_constructible_v =
-    detail::is_nothrow_voidable_constructible<T, Args...>::value;
+inline constexpr bool is_nothrow_voidable_constructible_v = detail::is_nothrow_voidable_constructible<T, Args...>::value;
+
+template <typename T, typename R>
+inline constexpr bool is_nothrow_voidable_constructible_from_v = voidable_apply_v<bind_meta_adapter<detail::is_nothrow_voidable_constructible, T>, R>;
+
+template <typename T>
+inline constexpr bool is_nothrow_voidable_constructible_from_self_v = is_nothrow_voidable_constructible_from_v<T, T>;
+
+template <typename Self, typename T, typename R>
+inline constexpr bool is_nothrow_voidable_constructible_from_like_v = is_nothrow_voidable_constructible_from_v<T, forward_voidable_argument_like_t<Self, R>>;
 
 template <typename Self, typename T>
-inline constexpr bool is_nothrow_voidable_self_constructible_like_v =
-    forwarding_voidable_apply_v<Self, bind_meta_adapter<detail::is_nothrow_voidable_constructible, T>, T>;
+inline constexpr bool is_nothrow_voidable_constructible_from_self_like_v = is_nothrow_voidable_constructible_from_like_v<Self, T, T>;
 
 template <typename T, typename... Args>
 concept IsNothrowVoidableConstructible = is_nothrow_voidable_constructible_v<T, Args...>;
 
+template <typename T, typename R>
+concept IsNothrowVoidableConstructibleFrom = is_nothrow_voidable_constructible_from_v<T, R>;
+
+template <typename T>
+concept IsNothrowVoidableConstructibleFromSelf = is_nothrow_voidable_constructible_from_self_v<T>;
+
+template <typename Self, typename T, typename R>
+concept IsNothrowVoidableConstructibleFromLike = is_nothrow_voidable_constructible_from_like_v<Self, T, R>;
+
 template <typename Self, typename T>
-concept IsNothrowVoidableConstructibleLike = is_nothrow_voidable_self_constructible_like_v<Self, T>;
+concept IsNothrowVoidableConstructibleFromSelfLike = is_nothrow_voidable_constructible_from_self_like_v<Self, T>;
 
-
-
-
-
-
-
-
-// Destructure a BasicResult into its components.
+// Forward declaration of BasicResult.
 
 template <typename M, typename T, IsTriviallyStorable... Es>
 requires IsNormalizedPack<M, Es...>
 struct BasicResult;
+
+// Determine whether a type is a BasicResult.
+
+namespace detail {
+
+template <typename X>
+inline constexpr bool is_result_exact_impl_v = false;
+
+template <typename M, typename T, typename... Es>
+inline constexpr bool is_result_exact_impl_v<BasicResult<M, T, Es...>> = true;
+
+} // namespace detail
+
+template <typename X>
+inline constexpr bool is_result_v = detail::is_result_exact_impl_v<std::remove_cvref_t<X>>;
+
+template <typename X>
+concept IsResult = is_result_v<X>;
+
+// Destructure a BasicResult into its components.
 
 template <typename X>
 struct result_impl_traits;
@@ -257,29 +201,9 @@ struct result_impl_traits<BasicResult<M, T, Es...>> {
     using UniverseType = M;
     using ValueType = T;
     using RowType = Row<Es...>;
-    using StatusType = status_from_row_t<UniverseType, RowType>;
+    using StatusType = BasicStatus<M, Es...>;
 
 };
-
-namespace detail {
-
-// Determine whether a type is a BasicResult.
-
-template <typename X>
-inline constexpr bool is_result_impl_exact_v = false;
-
-template <typename M, typename T, typename... Es>
-inline constexpr bool is_result_impl_exact_v<BasicResult<M, T, Es...>> = true;
-
-} // namespace detail
-
-template <typename X>
-inline constexpr bool is_result_impl_v = detail::is_result_impl_exact_v<std::remove_cvref_t<X>>;
-
-template <typename X>
-concept IsResult = is_result_impl_v<X>;
-
-// Helpers for destructuring a BasicResult.
 
 template <IsResult X>
 using result_universe_t = result_impl_traits<std::remove_cvref_t<X>>::UniverseType;
@@ -306,20 +230,14 @@ template <typename X, typename R, typename V>
 struct result_rebind_adapter;
 
 template <typename M, typename T, typename... Es, typename R, typename... Fs>
-struct result_rebind_adapter<BasicResult<M, T, Es...>, R, Row<Fs...>>
-    : std::type_identity<BasicResult<M, R, Fs...>> {};
+struct result_rebind_adapter<BasicResult<M, T, Es...>, R, Row<Fs...>> : std::type_identity<BasicResult<M, R, Fs...>> {};
 
 } // namespace detail
 
 template <IsResult X, typename R, IsRow V>
 using result_rebind_t = detail::result_rebind_adapter<std::remove_cvref_t<X>, R, V>::type;
 
-
-
-
-
-
-
+// TODO: REFACTOR HANDLER HELPERS
 
 // Determine whether a handler is invocable and valid at a point.
 
@@ -335,7 +253,7 @@ inline constexpr bool is_handler_branch_valid_invocable_v =
 
 template <typename H, typename Self, typename E>
 inline constexpr bool is_handler_branch_valid_result_v =
-    is_result_impl_v<std::remove_cvref_t<handler_invoke_result_t<H, Self, E>>>;
+    is_result_v<std::remove_cvref_t<handler_invoke_result_t<H, Self, E>>>;
 
 template <typename H, typename Self, typename E>
 inline constexpr bool is_handler_branch_valid_universe_v = std::same_as<
@@ -349,6 +267,8 @@ inline constexpr bool is_handler_branch_valid_value_v = std::same_as<
     result_value_t<std::remove_cvref_t<handler_invoke_result_t<H, Self, E>>>
 >;
 
+//
+
 template <typename H, typename Self, typename E>
 inline constexpr bool is_handler_branch_valid_v =
     is_handler_branch_valid_invocable_v<H, Self, E> &&
@@ -356,41 +276,25 @@ inline constexpr bool is_handler_branch_valid_v =
     is_handler_branch_valid_universe_v<H, Self, E> &&
     is_handler_branch_valid_value_v<H, Self, E>;
 
+// Exception specification for the transform combinator.
 
-
-
-
-
-
-
-
-
-
-// Exception specification for the transform (fmap) combinator.
-
-
-
-
-// Exception specification for transform combinator.
-
-// template <typename Self, typename F, typename T>
-// inline constexpr bool is_nothrow_voidable_transform_v =
-//     is_nothrow_voidable_invocable_like_v<Self, F, T> &&
-//     is_nothrow_voidable_constructible_v<
-//         std::remove_cvref_t<voidable_invoke_result_like_t<Self, F, T>>,
-//         voidable_invoke_result_like_t<Self, F, T>
-//     >;
+template <typename Self, typename F, typename T>
+inline constexpr bool is_nothrow_specification_transform_v =
+    is_nothrow_voidable_invocable_like_v<Self, F, T> &&
+    is_nothrow_voidable_constructible_from_v<
+        std::remove_cvref_t<voidable_invoke_result_like_t<Self, F, T>>,
+        voidable_invoke_result_like_t<Self, F, T>
+    >;
 
 
 
 // The main result type.
 
-// TODO: Need to assert trivial copy/move constructibility for Es... in the con-
-// straints.
-
 template <typename M, typename T, IsTriviallyStorable... Es>
 requires IsNormalizedPack<M, Es...>
 struct BasicResult final {
+
+    // TODO: Assert trivial copy/move-constructibility in contsraints.
 
     private:
 
@@ -404,8 +308,8 @@ struct BasicResult final {
     requires IsNormalizedPack<N, Fs...>
     friend struct BasicResult;
 
-    // The following invariants are inherited from the status type but repeated
-    // here for documentation.
+    // The following invariants are inherited from BasicStatus but repeated here
+    // for documentation purposes.
 
     static_assert((std::is_trivially_copyable_v<Es> && ...),
         "BasicResult: alternatives must be trivially copyable");
@@ -451,12 +355,12 @@ struct BasicResult final {
              IsNonVolatile<Narrow> &&
              std::same_as<result_value_t<Narrow>, T> &&
              std::same_as<result_universe_t<Narrow>, M> &&
-             IsVoidableSelfConstructibleLike<Narrow, T> &&
+             IsVoidableConstructibleFromSelfLike<Narrow, T> &&
              IsNormalizedRow<M, result_row_t<Narrow>> &&
              row_proper_subset_normalized_v<M, result_row_t<Narrow>, Row<Es...>> &&
              IsRowExactInRow<M, Row<Es...>, result_row_t<Narrow>>
     constexpr BasicResult(Narrow&& narrow)
-    noexcept(is_nothrow_voidable_self_constructible_like_v<Narrow, T>) :
+    noexcept(is_nothrow_voidable_constructible_from_self_like_v<Narrow, T>) :
         result_ { BasicResult::widen(std::forward<Narrow>(narrow)) } {}
 
     // Determine whether a BasicResult holds a value.
@@ -504,7 +408,7 @@ struct BasicResult final {
     requires IsNonVoid<T> &&
              IsNonVolatile<Self>
     // NOLINTNEXTLINE(cppcoreguidelines-missing-std-forward)
-    [[nodiscard]] constexpr forward_voidable_argument_t<Self, T> value(this Self&& self) noexcept {
+    [[nodiscard]] constexpr forward_voidable_argument_like_t<Self, T> value(this Self&& self) noexcept {
         assert(self.has_value() && "BasicResult::value: value branch not active");
         return std::forward_like<Self>(*self.result_);
     }
@@ -518,7 +422,7 @@ struct BasicResult final {
              IsNonVolatile<Self> &&
              IsEmptyRow<Row<Es...>>
     // NOLINTNEXTLINE(cppcoreguidelines-missing-std-forward)
-    [[nodiscard]] constexpr forward_voidable_argument_t<Self, T> take(this Self&& self) noexcept {
+    [[nodiscard]] constexpr forward_voidable_argument_like_t<Self, T> take(this Self&& self) noexcept {
         assert(self.has_value() && "BasicResult::take: value branch not active");
         return std::forward_like<Self>(*self.result_);
     }
@@ -555,19 +459,17 @@ struct BasicResult final {
         return *pointer;
     }
 
-    // The transform (fmap) combinator.
+    // The transform combinator.
 
     template <typename Self, typename F>
     requires IsNonVolatile<Self> &&
              IsVoidableInvocableLike<Self, F, T>
-    [[nodiscard]] constexpr auto transform(this Self&& self, F&& f)
+    [[nodiscard]] constexpr auto /* prvalue */ transform(this Self&& self, F&& f)
+    noexcept(is_nothrow_specification_transform_v<Self, F, T>) {
 
-    {
-    // noexcept(is_nothrow_voidable_transform_v<Self, F, T>) {
-
-        // transform : Result<M, T, Us...> ->
+        // transform : Result<M, T, Es...> ->
         //             (T -> S) ->
-        //             Result<M, S, Us...>
+        //             Result<M, S, Es...>
 
         using InvokeF = std::remove_cvref_t<voidable_invoke_result_like_t<Self, F, T>>;
         using ResultF = BasicResult<M, InvokeF, Es...>;
@@ -612,7 +514,7 @@ struct BasicResult final {
 
         using InvokeF = std::remove_cvref_t<voidable_invoke_result_like_t<Self, F, T>>; /* decayed */
 
-        static_assert(is_result_impl_v<InvokeF>, "and_then: F must return a BasicResult");
+        static_assert(is_result_v<InvokeF>, "and_then: F must return a BasicResult");
         static_assert(std::same_as<result_universe_t<InvokeF>, M>, "and_then: F must preserve the universe M");
         static_assert(IsNormalizedRow<M, result_row_t<InvokeF>>, "and_then: F must return a normalized error row");
 
@@ -720,7 +622,7 @@ struct BasicResult final {
 
     template <typename Narrow>
     [[nodiscard]] static constexpr ResultType widen(Narrow&& narrow)
-    noexcept(is_nothrow_voidable_self_constructible_like_v<Narrow, T>) {
+    noexcept(is_nothrow_voidable_constructible_from_self_like_v<Narrow, T>) {
 
         if (narrow.has_value()) {
             if constexpr (std::is_void_v<T>) {

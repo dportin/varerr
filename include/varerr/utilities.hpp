@@ -95,6 +95,59 @@ template <typename F, typename M>
 requires IsPackApplyValueWellFormed<F, M>
 inline constexpr auto pack_apply_v = pack_apply<F, M>::bind_type::value;
 
+// Apply a metafunction F to a voidable type T.
+
+namespace detail {
+
+template <typename F, typename T>
+struct voidable_apply_impl {};
+
+template <typename F, typename T>
+requires IsNonVoid<T> &&
+         requires { typename F::template bind<T>; }
+struct voidable_apply_impl<F, T> {
+    using bind_type = typename F::template bind<T>;
+};
+
+template <typename F>
+requires requires { typename F::template bind<>; }
+struct voidable_apply_impl<F, void> {
+    using bind_type = typename F::template bind<>;
+};
+
+} // namespace detail
+
+// Determine whether a metafunction F can be applied to a voidable type T.
+
+template <typename F, typename T>
+concept IsVoidableApplyBindWellFormed = requires {
+    typename detail::voidable_apply_impl<F, T>::bind_type;
+};
+
+template <typename F, typename T>
+concept IsVoidableApplyTypeWellFormed = IsVoidableApplyBindWellFormed<F, T> && requires {
+    typename detail::voidable_apply_impl<F, T>::bind_type::type;
+};
+
+template <typename F, typename T>
+concept IsVoidableApplyValueWellFormed = IsVoidableApplyBindWellFormed<F, T> && requires {
+    detail::voidable_apply_impl<F, T>::bind_type::value;
+};
+
+// Apply a metafunction F to a voidable type T.
+
+template <typename F, typename T>
+requires IsVoidableApplyBindWellFormed<F, T>
+struct voidable_apply : detail::voidable_apply_impl<F, T> {};
+
+template <typename F, typename T>
+requires IsVoidableApplyTypeWellFormed<F, T>
+using voidable_apply_t = voidable_apply<F, T>::bind_type::type;
+
+template <typename F, typename T>
+requires IsVoidableApplyValueWellFormed<F, T>
+inline constexpr auto voidable_apply_v = voidable_apply<F, T>::bind_type::value;
+
 // The identity adapter passes a metafunction F to pack_apply.
 
 template <template <typename...> typename F, typename... Args>

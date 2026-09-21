@@ -290,6 +290,16 @@ template <std::unsigned_integral T>
 
 }
 
+// Track value category and constness of forwarded parameters.
+
+enum class ForwardCategory : unsigned char {
+    None,
+    LValue,
+    ConstLValue,
+    RValue,
+    ConstRValue
+};
+
 } // namespace varerr::tests
 
 #endif // VARERR_TESTS_UTILITIES_HPP

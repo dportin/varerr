@@ -5,6 +5,7 @@
 #include "include/utilities.hpp"
 // #include "include/lifetime.hpp"
 #include "include/universe.hpp"
+#include "include/functor.hpp"
 
 #include <varerr/utilities.hpp>
 #include <varerr/storage.hpp>
@@ -19,6 +20,7 @@
 
 using namespace varerr::tests;
 using namespace varerr::tests::universe;
+using namespace varerr::tests::functor;
 
 namespace {
 
@@ -122,6 +124,11 @@ concept IsResultErrorWellFormed = requires {
     std::declval<R>().template error<E>();
 };
 
+template <typename R, typename F>
+concept IsResultTransformWellFormed = requires (R r, F f) {
+    std::forward<R>(r).transform(f);
+};
+
 // Determine whether a non-void BasicResult is copy or move assignable.
 
 template <typename T>
@@ -171,7 +178,7 @@ static_assert(std::same_as<ResultVarRightType<int>, varerr::BasicResult<Universe
 
 } // namespace
 
-// Triviality tests
+// Triviality tests.
 
 TEMPLATE_TEST_CASE("varerr_result_trivial", "[varerr][result]",
     (HomResult<TrivialType, 0>),
@@ -252,7 +259,7 @@ TEMPLATE_TEST_CASE("varerr_result_trivial_void", "[varerr][result]",
 
 }
 
-// Constructibility tests
+// Constructibility tests.
 
 TEST_CASE("varerr_result_construct_empty", "[varerr][result]") {
 
@@ -500,7 +507,7 @@ TEST_CASE("varerr_result_construct_widen", "[varerr][result]") {
 
 }
 
-// Constraints tests
+// Constraint specification tests.
 
 TEMPLATE_TEST_CASE("varerr_result_constraints_default", "[varerr][result]",
     TrivialType,
@@ -919,7 +926,11 @@ TEMPLATE_TEST_CASE("varerr_result_constraints_error", "[varerr][result]",
 
 }
 
-// Return value tests
+TEST_CASE("varerr_result_constraints_transform", "[varerr][result]") {
+    REQUIRE(false);
+}
+
+// Return value specification tests.
 
 TEST_CASE("varerr_result_return_has_value", "[varerr][result]") {
     REQUIRE(false); /* trivial */
@@ -1018,7 +1029,11 @@ TEST_CASE("varerr_result_return_error", "[varerr][result]") {
 
 }
 
-// Noexcept tests
+TEST_CASE("varerr_result_return_transform", "[varerr][result]") {
+    REQUIRE(false);
+}
+
+// Exception specification tests.
 
 TEST_CASE("varerr_result_noexcept_default", "[varerr][result]") {
 
@@ -1243,6 +1258,10 @@ TEMPLATE_TEST_CASE("varerr_result_noexcept_error", "[varerr][result]",
 
 }
 
+TEST_CASE("varerr_result_noexcept_transform", "[varerr][result]") {
+    REQUIRE(false);
+}
+
 // Functional tests
 
 TEST_CASE("varerr_result_functional_default", "[varerr][result]") {
@@ -1290,5 +1309,9 @@ TEST_CASE("varerr_result_functional_error_if") {
 }
 
 TEST_CASE("varerr_result_functional_error") {
+    REQUIRE(false);
+}
+
+TEST_CASE("varerr_result_functional_transform", "[varerr][result]") {
     REQUIRE(false);
 }

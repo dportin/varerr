@@ -267,8 +267,6 @@ inline constexpr bool is_handler_branch_valid_value_v = std::same_as<
     result_value_t<std::remove_cvref_t<handler_invoke_result_t<H, Self, E>>>
 >;
 
-//
-
 template <typename H, typename Self, typename E>
 inline constexpr bool is_handler_branch_valid_v =
     is_handler_branch_valid_invocable_v<H, Self, E> &&
@@ -286,7 +284,12 @@ inline constexpr bool is_nothrow_specification_transform_v =
         voidable_invoke_result_like_t<Self, F, T>
     >;
 
+// Lambda specification for the transform combinator.
 
+template <typename Self, typename F, typename T>
+concept IsLambdaSpecificationTransform =
+    IsVoidableInvocableLike<Self, F, T> &&
+    (!std::is_lvalue_reference_v<voidable_invoke_result_like_t<Self, F, T>>);
 
 // The main result type.
 
@@ -294,7 +297,7 @@ template <typename M, typename T, IsTriviallyStorable... Es>
 requires IsNormalizedPack<M, Es...>
 struct BasicResult final {
 
-    // TODO: Assert trivial copy/move-constructibility in contsraints.
+    // TODO: Assert trivial copy/move-constructibility in constraints.
 
     private:
 
@@ -463,7 +466,7 @@ struct BasicResult final {
 
     template <typename Self, typename F>
     requires IsNonVolatile<Self> &&
-             IsVoidableInvocableLike<Self, F, T>
+             IsLambdaSpecificationTransform<Self, F, T>
     [[nodiscard]] constexpr auto /* prvalue */ transform(this Self&& self, F&& f)
     noexcept(is_nothrow_specification_transform_v<Self, F, T>) {
 
@@ -500,7 +503,7 @@ struct BasicResult final {
 
     }
 
-    // RESUME REFACTORING
+    // TODO: RESUME REFACTORING HERE
 
     // The and_then (bind) combinator.
 

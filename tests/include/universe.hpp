@@ -2,6 +2,7 @@
 #define VARERR_TESTS_UNIVERSE_HPP
 
 #include "utilities.hpp"
+
 #include <algorithm>
 #include <cassert>
 #include <climits>
@@ -686,14 +687,6 @@ static_assert(!std::is_nothrow_default_constructible_v<DefaultThrowType>);
 // Track the value category of forwarded arguments. The forwarding constructors
 // are constrained to the cvref-unqualified type to prevent hijacking the copy
 // and move constructors (so the class remains trivially copyable).
-
-enum class ForwardCategory : unsigned char {
-    None,
-    LValue,
-    ConstLValue,
-    RValue,
-    ConstRValue
-};
 
 [[nodiscard]] constexpr ForwardCategory forward_category(int&) noexcept {
     return ForwardCategory::LValue;

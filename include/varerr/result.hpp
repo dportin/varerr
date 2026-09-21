@@ -647,6 +647,14 @@ struct BasicResult final {
         return std::forward<Self>(self).result_.error();
     }
 
+    template <typename S>
+    requires IsStatus<S> &&
+             IsNonEmptyRow<Row<Es...>> &&
+             std::is_constructible_v<ErrorType, S>
+    explicit constexpr BasicResult(std::unexpect_t, S&& status)
+    noexcept (std::is_nothrow_constructible_v<ErrorType, S>) :
+        result_ { std::unexpect, std::forward<S>(status) } {}
+
     ResultType result_;
 
 };

@@ -126,7 +126,7 @@ concept IsResultErrorWellFormed = requires {
 
 template <typename R, typename F>
 concept IsResultTransformWellFormed = requires (R r, F f) {
-    std::forward<R>(r).transform(f);
+    std::forward<R>(r).transform(std::forward<F>(f));
 };
 
 // Determine whether a non-void BasicResult is copy or move assignable.
@@ -763,13 +763,16 @@ TEST_CASE("varerr_result_constraints_widen_types", "[varerr][result]") {
     });
 
     iterate_cref_matrix<ResultVarSubType<NoCopyConstructType>>([]<typename T>(const std::type_identity<T>) -> void {
-        STATIC_REQUIRE_FALSE(std::is_constructible_v<ResultVarSuperType<NoCopyConstructType>, T>);
+        constexpr bool is_const = std::is_const_v<std::remove_reference_t<T>>;
+        constexpr bool is_rvalue = std::is_rvalue_reference_v<T&&>;
+        constexpr bool is_constructible = is_rvalue && !is_const;
+        STATIC_REQUIRE(std::is_constructible_v<ResultVarSuperType<NoCopyConstructType>, T> == is_constructible);
     });
 
     iterate_cref_matrix<ResultVarSubType<NoMoveConstructType>>([]<typename T>(const std::type_identity<T>) -> void {
         constexpr bool is_const = std::is_const_v<std::remove_reference_t<T>>;
-        constexpr bool is_lvalue_ref = std::is_lvalue_reference_v<T>;
-        constexpr bool is_constructible = is_const || is_lvalue_ref;
+        constexpr bool is_lvalue = std::is_lvalue_reference_v<T>;
+        constexpr bool is_constructible = is_const || is_lvalue;
         STATIC_REQUIRE(std::is_constructible_v<ResultVarSuperType<NoMoveConstructType>, T> == is_constructible);
     });
 
@@ -927,7 +930,181 @@ TEMPLATE_TEST_CASE("varerr_result_constraints_error", "[varerr][result]",
 }
 
 TEST_CASE("varerr_result_constraints_transform", "[varerr][result]") {
-    REQUIRE(false);
+
+    using ValueType = TrivialType;
+    using ResultType = HomResult<ValueType, 1>;
+
+    // The implicit object parameter must be non-volatile.
+
+    iterate_cvref_matrix<ResultType>([]<typename T>(const std::type_identity<T>) -> void {
+        constexpr bool is_volatile = std::is_volatile_v<std::remove_reference_t<T>>;
+        STATIC_REQUIRE(IsResultTransformWellFormed<T, FunctorOnSelfFromForwardToValue<ValueType>> == !is_volatile);
+    });
+
+    // The functor must not return an lvalue reference.
+
+    iterate_cref_matrix<ResultType>([]<typename T>(const std::type_identity<T>) -> void {
+        constexpr bool is_lvalue = std::is_lvalue_reference_v<T>;
+        STATIC_REQUIRE(IsResultTransformWellFormed<T, FunctorOnSelfFromForwardToForward<ValueType>> == !is_lvalue);
+    });
+
+    iterate_cref_matrix<ResultType>([]<typename T>(const std::type_identity<T>) -> void {
+        constexpr bool is_rvalue = std::is_rvalue_reference_v<T&&>;
+        constexpr bool is_const = std::is_const_v<std::remove_reference_t<T>>;
+        STATIC_REQUIRE(IsResultTransformWellFormed<T, FunctorOnConstValueFromLeastConstrainedToValue<ValueType>>);
+        STATIC_REQUIRE(IsResultTransformWellFormed<T, FunctorOnConstValueFromLeastConstrainedToConstValue<ValueType>>);
+        STATIC_REQUIRE_FALSE(IsResultTransformWellFormed<T, FunctorOnConstValueFromLeastConstrainedToLValueRef<ValueType>>);
+        STATIC_REQUIRE_FALSE(IsResultTransformWellFormed<T, FunctorOnConstValueFromLeastConstrainedToConstLValueRef<ValueType>>);
+        STATIC_REQUIRE(IsResultTransformWellFormed<T, FunctorOnConstValueFromLeastConstrainedToRValueRef<ValueType>> == (is_rvalue && !is_const));
+        STATIC_REQUIRE(IsResultTransformWellFormed<T, FunctorOnConstValueFromLeastConstrainedToConstRValueRef<ValueType>> == is_rvalue);
+    });
+
+    // A functor that accepts a value, const value or const lvalue reference
+    // binds every value category.
+
+    iterate_cref_matrix<ResultType>([]<typename T>(const std::type_identity<T>) -> void {
+        STATIC_REQUIRE(IsResultTransformWellFormed<T, FunctorOnSelfFromValueToValue<ValueType>>);
+        STATIC_REQUIRE(IsResultTransformWellFormed<T, FunctorOnSelfFromConstValueToValue<ValueType>>);
+        STATIC_REQUIRE(IsResultTransformWellFormed<T, FunctorOnSelfFromConstLValueRefToValue<ValueType>>);
+    });
+
+    // A functor that accepts a non-const lvalue reference only binds non-const
+    // lvalue references.
+
+    iterate_cref_matrix<ResultType>([]<typename T>(const std::type_identity<T>) -> void {
+        constexpr bool is_lvalue = std::is_lvalue_reference_v<T>;
+        constexpr bool is_const = std::is_const_v<std::remove_reference_t<T>>;
+        constexpr bool well_formed = is_lvalue && !is_const;
+        STATIC_REQUIRE(IsResultTransformWellFormed<T, FunctorOnSelfFromLValueRefToValue<ValueType>> == well_formed);
+    });
+
+    // A functor that accepts a non-const rvalue reference only binds non-const
+    // rvalues and rvalue references.
+
+    iterate_cref_matrix<ResultType>([]<typename T>(const std::type_identity<T>) -> void {
+        constexpr bool is_rvalue = std::is_rvalue_reference_v<T&&>;
+        constexpr bool is_const = std::is_const_v<std::remove_reference_t<T>>;
+        constexpr bool well_formed = is_rvalue && !is_const;
+        STATIC_REQUIRE(IsResultTransformWellFormed<T, FunctorOnSelfFromRValueRefToValue<ValueType>> == well_formed);
+    });
+
+    // A functor that accepts a const rvalue reference binds every value catego-
+    // ry except const and non-const lvalue references.
+
+    iterate_cref_matrix<ResultType>([]<typename T>(const std::type_identity<T>) -> void {
+        constexpr bool is_lvalue = std::is_lvalue_reference_v<T>;
+        STATIC_REQUIRE(IsResultTransformWellFormed<T, FunctorOnSelfFromConstRValueRefToValue<ValueType>> == !is_lvalue);
+    });
+
+    // A nullary functor is never invocable with a non-void value.
+
+    iterate_cvref_matrix<ResultType>([]<typename T>(const std::type_identity<T>) -> void {
+        STATIC_REQUIRE_FALSE(IsResultTransformWellFormed<T, FunctorOnSelfFromVoidToValue<ValueType>>);
+    });
+
+}
+
+TEST_CASE("varerr_result_constraints_transform_void", "[varerr][result]") {
+
+    using ValueVoidType = void;
+    using ResultVoidType = HomResult<ValueVoidType, 1>;
+
+    using ValueTrivialType = TrivialType;
+    using ResultTrivialType = HomResult<ValueTrivialType, 1>;
+
+    // A void result accepts a nullary functor.
+
+    iterate_cvref_matrix<ResultVoidType>([]<typename T>(const std::type_identity<T>) -> void {
+        constexpr bool is_volatile = std::is_volatile_v<std::remove_reference_t<T>>;
+        STATIC_REQUIRE(IsResultTransformWellFormed<T, FunctorOnSelfFromVoidToVoid> == !is_volatile);
+        STATIC_REQUIRE(IsResultTransformWellFormed<T, FunctorOnSelfFromVoidToValue<ValueTrivialType>> == !is_volatile);
+        STATIC_REQUIRE_FALSE(IsResultTransformWellFormed<T, FunctorOnSelfFromForwardToVoid>);
+        STATIC_REQUIRE_FALSE(IsResultTransformWellFormed<T, FunctorOnSelfFromForwardToValue<ValueTrivialType>>);
+    });
+
+    // A non-void result accepts a non-void functor.
+
+    iterate_cvref_matrix<ResultTrivialType>([]<typename T>(const std::type_identity<T>) -> void {
+        constexpr bool is_volatile = std::is_volatile_v<std::remove_reference_t<T>>;
+        STATIC_REQUIRE(IsResultTransformWellFormed<T, FunctorOnSelfFromForwardToVoid> == !is_volatile);
+        STATIC_REQUIRE_FALSE(IsResultTransformWellFormed<T, FunctorOnSelfFromVoidToVoid>);
+    });
+
+}
+
+TEST_CASE("varerr_result_constraints_transform_functor", "[varerr][result]") {
+
+    using ValueType = TrivialType;
+    using ResultType = HomResult<ValueType, 1>;
+
+    // The functor must be passed with a value category and constness accepted
+    // by the call operator.
+
+    iterate_cref_matrix<FunctorOnValueFromConstLValueRefToValue<ValueType>>(
+        []<typename F>(const std::type_identity<F>) -> void {
+        constexpr bool is_const = std::is_const_v<std::remove_reference_t<F>>;
+        STATIC_REQUIRE(IsResultTransformWellFormed<ResultType&, F> == !is_const);
+    });
+
+    iterate_cref_matrix<FunctorOnConstValueFromConstLValueRefToValue<ValueType>>(
+        []<typename F>(const std::type_identity<F>) -> void {
+        STATIC_REQUIRE(IsResultTransformWellFormed<ResultType&, F>);
+    });
+
+    iterate_cref_matrix<FunctorOnLValueRefFromConstLValueRefToValue<ValueType>>(
+        []<typename F>(const std::type_identity<F>) -> void {
+        constexpr bool is_lvalue = std::is_lvalue_reference_v<F>;
+        constexpr bool is_const = std::is_const_v<std::remove_reference_t<F>>;
+        STATIC_REQUIRE(IsResultTransformWellFormed<ResultType&, F> == (is_lvalue && !is_const));
+    });
+
+    iterate_cref_matrix<FunctorOnConstLValueRefFromConstLValueRefToValue<ValueType>>(
+        []<typename F>(const std::type_identity<F>) -> void {
+        STATIC_REQUIRE(IsResultTransformWellFormed<ResultType&, F>);
+    });
+
+    iterate_cref_matrix<FunctorOnRValueRefFromConstLValueRefToValue<ValueType>>(
+        []<typename F>(const std::type_identity<F>) -> void {
+        constexpr bool is_rvalue = std::is_rvalue_reference_v<F&&>;
+        constexpr bool is_const = std::is_const_v<std::remove_reference_t<F>>;
+        STATIC_REQUIRE(IsResultTransformWellFormed<ResultType&, F> == (is_rvalue && !is_const));
+    });
+
+    iterate_cref_matrix<FunctorOnConstRValueRefFromConstLValueRefToValue<ValueType>>(
+        []<typename F>(const std::type_identity<F>) -> void {
+        constexpr bool is_rvalue = std::is_rvalue_reference_v<F&&>;
+        STATIC_REQUIRE(IsResultTransformWellFormed<ResultType&, F> == is_rvalue);
+    });
+
+}
+
+TEST_CASE("varerr_result_constraints_transform_construct", "[varerr][result]") {
+
+    using ValueType = TrivialType;
+    using ResultType = HomResult<ValueType, 1>;
+
+    // This test exercises the constructibility constraint, which asserts that
+    // the unqualified result type R must be constructible from the (possibly)
+    // qualified result type.
+
+    iterate_cref_matrix<ResultType>([]<typename T>(const std::type_identity<T>) -> void {
+        iterate_cref_matrix<NoMoveConstructType>([]<typename R>(const std::type_identity<R>) -> void {
+            constexpr bool is_rvalue = std::is_rvalue_reference_v<R&&>;
+            constexpr bool is_const = std::is_const_v<std::remove_reference_t<R>>;
+            constexpr bool well_formed = is_rvalue && is_const;
+            STATIC_REQUIRE(IsResultTransformWellFormed<T, FunctorOnSelfFromForwardToDeclared<R>> == well_formed);
+        });
+    });
+
+    iterate_cref_matrix<ResultType>([]<typename T>(const std::type_identity<T>) -> void {
+        iterate_cref_matrix<NoCopyConstructType>([]<typename R>(const std::type_identity<R>) -> void {
+            constexpr bool is_rvalue = std::is_rvalue_reference_v<R&&>;
+            constexpr bool is_const = std::is_const_v<std::remove_reference_t<R>>;
+            constexpr bool well_formed = is_rvalue && !is_const;
+            STATIC_REQUIRE(IsResultTransformWellFormed<T, FunctorOnSelfFromForwardToDeclared<R>> == well_formed);
+        });
+    });
+
 }
 
 // Return value specification tests.

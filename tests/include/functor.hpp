@@ -137,6 +137,68 @@ struct FunctorOnSelfFromForwardToForward {
     [[maybe_unused]] constexpr decltype(auto) operator()(this Self&&, R&& value) { return std::forward<R>(value); }
 };
 
+// Differentiate by value category and constness of the parameter while keeping
+// the return value fixed.
+
+template <typename T>
+struct FunctorOnSelfFromValueToValue {
+    template <typename Self>
+    [[maybe_unused]] constexpr T operator()(this Self&&, T value) { return value; }
+};
+
+template <typename T>
+struct FunctorOnSelfFromConstValueToValue {
+    template <typename Self>
+    [[maybe_unused]] constexpr T operator()(this Self&&, const T value) { return value; }
+};
+
+template <typename T>
+struct FunctorOnSelfFromLValueRefToValue {
+    template <typename Self>
+    [[maybe_unused]] constexpr T operator()(this Self&&, T& value) { return value; }
+};
+
+template <typename T>
+struct FunctorOnSelfFromConstLValueRefToValue {
+    template <typename Self>
+    [[maybe_unused]] constexpr T operator()(this Self&&, const T& value) { return value; }
+};
+
+template <typename T>
+struct FunctorOnSelfFromRValueRefToValue {
+    template <typename Self>
+    [[maybe_unused]] constexpr T operator()(this Self&&, T&& value) { return std::move(value); }
+};
+
+template <typename T>
+struct FunctorOnSelfFromConstRValueRefToValue {
+    template <typename Self>
+    [[maybe_unused]] constexpr T operator()(this Self&&, const T&& value) { return std::move(value); }
+};
+
+// Differentiated by the declared return type (independent of the parameter).
+
+template <typename R>
+// NOLINTNEXTLINE(cppcoreguidelines-avoid-non-const-global-variables)
+inline std::remove_cvref_t<R> declared {};
+
+template <typename R>
+struct FunctorOnSelfFromForwardToDeclared {
+    template <typename Self, typename T>
+    [[maybe_unused]] constexpr R operator()(this Self&&, T&&) {
+
+        static_assert(std::is_default_constructible_v<std::remove_cvref_t<R>>,
+            "FunctorOnSelfFromForwardToDeclared: decayed return type must be default constructible");
+
+        if constexpr (std::is_reference_v<R>) {
+            return static_cast<R>(declared<R>);
+        } else {
+            return std::remove_cv_t<R> {};
+        }
+
+    }
+};
+
 // Report the value category of the forwarded and implicit object parameters.
 
 struct FunctorProbeResult {

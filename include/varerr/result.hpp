@@ -284,12 +284,17 @@ inline constexpr bool is_nothrow_specification_transform_v =
         voidable_invoke_result_like_t<Self, F, T>
     >;
 
-// Lambda specification for the transform combinator.
+// Requires specification for the transform combinator.
 
 template <typename Self, typename F, typename T>
-concept IsLambdaSpecificationTransform =
+concept IsRequiresSpecificationTransform =
+    IsNonVolatile<Self> &&
     IsVoidableInvocableLike<Self, F, T> &&
-    (!std::is_lvalue_reference_v<voidable_invoke_result_like_t<Self, F, T>>);
+    (!std::is_lvalue_reference_v<voidable_invoke_result_like_t<Self, F, T>>) &&
+    IsVoidableConstructibleFrom<
+        std::remove_cvref_t<voidable_invoke_result_like_t<Self, F, T>>,
+        voidable_invoke_result_like_t<Self, F, T>
+    >;
 
 // The main result type.
 
@@ -462,11 +467,14 @@ struct BasicResult final {
         return *pointer;
     }
 
-    // The transform combinator.
+    // The transform combinator. The value is forwarded with the value category
+    // of the implicit object parameter. A non-void functor performs one extran-
+    // eous move since the invocation result is passed to the in-place construc-
+    // tor as a temporary. Eliminating the move requires constructing the value
+    // directly in storage (but the std::expected constructor is private).
 
     template <typename Self, typename F>
-    requires IsNonVolatile<Self> &&
-             IsLambdaSpecificationTransform<Self, F, T>
+    requires IsRequiresSpecificationTransform<Self, F, T>
     [[nodiscard]] constexpr auto /* prvalue */ transform(this Self&& self, F&& f)
     noexcept(is_nothrow_specification_transform_v<Self, F, T>) {
 
@@ -486,19 +494,20 @@ struct BasicResult final {
             }
         }
 
-        const auto invoke = [&f, &self]() -> decltype(auto) {
-            if constexpr (std::is_void_v<T>) {
-                return std::invoke(std::forward<F>(f));
-            } else {
-                return std::invoke(std::forward<F>(f), std::forward<Self>(self).value());
-            }
-        };
-
         if constexpr (std::is_void_v<InvokeF>) {
-            static_cast<void>(invoke());
-            return ResultF(std::in_place);
+            if constexpr (std::is_void_v<T>) {
+                std::invoke(std::forward<F>(f));
+                return ResultF(std::in_place);
+            } else {
+                std::invoke(std::forward<F>(f), std::forward<Self>(self).value());
+                return ResultF(std::in_place);
+            }
         } else {
-            return ResultF(std::in_place, invoke());
+            if constexpr (std::is_void_v<T>) {
+                return ResultF(std::in_place, std::invoke(std::forward<F>(f)));
+            } else {
+                return ResultF(std::in_place, std::invoke(std::forward<F>(f), std::forward<Self>(self).value()));
+            }
         }
 
     }

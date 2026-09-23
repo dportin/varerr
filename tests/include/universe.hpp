@@ -297,9 +297,12 @@ static_assert(!std::is_nothrow_move_assignable_v<DegenerateErrorType>);
 
 struct NoCopyConstructType {
     int value_;
-    NoCopyConstructType(int value) : value_(value) {}
+    NoCopyConstructType() = default;
+    explicit NoCopyConstructType(int value) : value_(value) {}
     NoCopyConstructType(const NoCopyConstructType&) = delete;
+    NoCopyConstructType(NoCopyConstructType&&) = default;
     NoCopyConstructType& operator=(const NoCopyConstructType&) = default;
+    NoCopyConstructType& operator=(NoCopyConstructType&&) = default;
 };
 
 static_assert(std::is_trivially_copy_assignable_v<NoCopyConstructType>);

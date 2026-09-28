@@ -1436,7 +1436,64 @@ TEMPLATE_TEST_CASE("varerr_result_noexcept_error", "[varerr][result]",
 }
 
 TEST_CASE("varerr_result_noexcept_transform", "[varerr][result]") {
-    REQUIRE(false);
+
+    using ValueType = TrivialType;
+    using RowType = varerr::Row<ThrowAllErrorType>;
+    using UniverseType = pack_apply_t<bind_adapter<UniverseT>, RowType>;
+    using ResultType = varerr::result_from_row_t<UniverseType, ValueType, RowType>;
+
+    // The functor must be nothrow invocable with the forwarded value.
+
+    iterate_cref_matrix<ResultType>([]<typename R>(const std::type_identity<R>) -> void {
+        iterate_cref_matrix<ValueType>([]<typename T>(const std::type_identity<T>) -> void {
+            constexpr bool is_const_self = std::is_const_v<std::remove_reference_t<R>>;
+            constexpr bool is_const_value = std::is_const_v<std::remove_reference_t<T>>;
+            constexpr bool is_lvalue_self = std::is_lvalue_reference_v<R>;
+            constexpr bool is_lvalue_value = std::is_lvalue_reference_v<T>;
+            constexpr bool is_designated = (is_const_self == is_const_value && is_lvalue_self == is_lvalue_value);
+            STATIC_REQUIRE(noexcept(std::declval<R>().transform(FunctorOnSelfThrowOnForwardToValue<T> {})) == !is_designated);
+        });
+    });
+
+    // A void functor is vacuously nothrow constructible.
+
+    using ValueVoidType = void;
+    using ResultVoidType = varerr::result_from_row_t<UniverseType, ValueVoidType, RowType>;
+
+    STATIC_REQUIRE(noexcept(std::declval<ResultType>().transform(FunctorOnSelfFromForwardToVoid {})));
+    STATIC_REQUIRE(noexcept(std::declval<ResultVoidType>().transform(FunctorProbeParameter {})));
+
+    STATIC_REQUIRE(noexcept(std::declval<ResultVoidType>().transform(FunctorOnSelfFromVoidToVoid {})));
+    STATIC_REQUIRE(noexcept(std::declval<ResultVoidType>().transform(FunctorOnSelfFromVoidToValue<ValueType> {})));
+
+}
+
+TEMPLATE_TEST_CASE("varerr_result_noexcept_transform_construct", "[varerr][result]",
+    TrivialType,
+    ThrowAllValueType,
+    ThrowAllButDestructValueType,
+    ThrowConstructType,
+    ThrowDestructType,
+    ThrowCopyConstructType,
+    ThrowMoveConstructType
+) {
+
+    using ValueType = TestType;
+    using RowType = varerr::Row<ThrowAllErrorType>;
+    using UniverseType = pack_apply_t<bind_adapter<UniverseT>, RowType>;
+    using ResultType = varerr::result_from_row_t<UniverseType, ValueType, RowType>;
+
+    // The result must be nothrow constructible from itself.
+
+    iterate_cref_matrix<ValueType>([]<typename T>(const std::type_identity<T>) -> void {
+        if constexpr (!std::is_lvalue_reference_v<T>) {
+            constexpr bool is_nothrow_constructible = std::is_nothrow_constructible_v<std::remove_cvref_t<T>, T>;
+            STATIC_REQUIRE(noexcept(std::declval<ResultType>().transform(
+                FunctorOnSelfFromForwardToDeclared<T> {})) == is_nothrow_constructible
+            );
+        }
+    });
+
 }
 
 // Functional tests

@@ -2,6 +2,7 @@
 #define VARERR_TESTS_FUNCTOR_HPP
 
 #include "utilities.hpp"
+#include <type_traits>
 
 namespace varerr::tests::functor {
 
@@ -109,18 +110,18 @@ struct FunctorOnConstRValueRefFromConstLValueRefToValue {
 
 struct FunctorOnSelfFromForwardToVoid {
     template <typename Self, typename R>
-    [[maybe_unused]] constexpr void operator()(this Self&&, R&&) {}
+    [[maybe_unused]] constexpr void operator()(this Self&&, R&&) noexcept {}
 };
 
 struct FunctorOnSelfFromVoidToVoid {
     template <typename Self>
-    [[maybe_unused]] constexpr void operator()(this Self&&) {}
+    [[maybe_unused]] constexpr void operator()(this Self&&) noexcept {}
 };
 
 template <typename T>
 struct FunctorOnSelfFromVoidToValue {
     template <typename Self>
-    [[maybe_unused]] constexpr T operator()(this Self&&) { return T {}; }
+    [[maybe_unused]] constexpr T operator()(this Self&&) noexcept { return T {}; }
 };
 
 // Forward the value category and implicit object parameter.
@@ -135,6 +136,38 @@ template <typename T>
 struct FunctorOnSelfFromForwardToForward {
     template <typename Self, typename R>
     [[maybe_unused]] constexpr decltype(auto) operator()(this Self&&, R&& value) { return std::forward<R>(value); }
+};
+
+// Differentiate by exception specification for value type.
+
+template <typename From, typename To>
+struct copy_cvref {
+
+    private:
+
+    using FromBase = std::remove_reference_t<From>;
+    using ToBase = std::remove_cvref_t<To>;
+    using ToWithConst = std::conditional_t<std::is_const_v<FromBase>, const ToBase, ToBase>;
+    using ToWithConstVol = std::conditional_t<std::is_volatile_v<FromBase>, volatile ToWithConst, ToWithConst>;
+    using ToWithConstVolRef = std::conditional_t<std::is_lvalue_reference_v<From>, ToWithConstVol&, ToWithConstVol&&>;
+
+    public:
+
+    using type = ToWithConstVolRef;
+
+};
+
+template <typename From, typename To>
+using copy_cvref_t = copy_cvref<From, To>::type;
+
+template <typename T>
+struct FunctorOnSelfThrowOnForwardToValue {
+    template <typename Self, typename R>
+    requires std::same_as<std::remove_cvref_t<T>, std::remove_cvref_t<R>>
+    [[maybe_unused]] constexpr std::remove_cvref_t<T> operator()(this Self&&, R&& value)
+    noexcept(!std::same_as<copy_cvref_t<T, R>, R&&>) {
+        return std::forward<R>(value);
+    }
 };
 
 // Differentiate by value category and constness of the parameter while keeping
@@ -185,7 +218,7 @@ inline std::remove_cvref_t<R> declared {};
 template <typename R>
 struct FunctorOnSelfFromForwardToDeclared {
     template <typename Self, typename T>
-    [[maybe_unused]] constexpr R operator()(this Self&&, T&&) {
+    [[maybe_unused]] constexpr R operator()(this Self&&, T&&) noexcept {
 
         static_assert(std::is_default_constructible_v<std::remove_cvref_t<R>>,
             "FunctorOnSelfFromForwardToDeclared: decayed return type must be default constructible");
